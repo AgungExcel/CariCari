@@ -1,0 +1,2689 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #0f172a;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+
+      --blue: #2563eb;
+      --green: #059669;
+      --red: #dc2626;
+      --amber: #d97706;
+      --purple: #7c3aed;
+      --cyan: #0891b2;
+
+      --blue-bg: #eff6ff;
+      --green-bg: #ecfdf5;
+      --red-bg: #fef2f2;
+      --amber-bg: #fffbeb;
+      --purple-bg: #f5f3ff;
+      --cyan-bg: #ecfeff;
+
+      --blue-line: #bfdbfe;
+      --green-line: #bbf7d0;
+      --red-line: #fecaca;
+      --amber-line: #fde68a;
+      --purple-line: #ddd6fe;
+      --cyan-line: #a5f3fc;
+
+      --gray-bg: #f3f4f6;
+      --gray-line: #e5e7eb;
+
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      min-height: 100%;
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    body.lock-scroll {
+      overflow: hidden;
+    }
+
+    .app {
+      width: 100%;
+      height: 100vh;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    .topbar {
+      width: 100%;
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 22px;
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04);
+      flex: 0 0 auto;
+      z-index: 20;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      min-width: 260px;
+    }
+
+    .logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #2563eb, #0f172a);
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      font-weight: 900;
+      font-size: 17px;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .brand-title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1.2;
+      color: var(--primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .brand-subtitle {
+      margin: 3px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .header-stats {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .header-stat {
+      min-width: 86px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+    }
+
+    .header-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 3px;
+    }
+
+    .header-stat strong {
+      display: block;
+      color: var(--primary);
+      font-size: 20px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .header-stat.blue strong {
+      color: var(--blue);
+    }
+
+    .header-stat.green strong {
+      color: var(--green);
+    }
+
+    .header-stat.amber strong {
+      color: var(--amber);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .icon-btn {
+      border: none;
+      border-radius: 14px;
+      width: 42px;
+      height: 42px;
+      padding: 0;
+      cursor: pointer;
+      font-weight: 800;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #ffffff;
+      display: inline-grid;
+      place-items: center;
+      white-space: nowrap;
+      transition: 0.15s ease;
+      box-shadow: 0 9px 20px rgba(37, 99, 235, 0.18);
+    }
+
+    .icon-btn:hover {
+      filter: brightness(0.96);
+      transform: translateY(-1px);
+    }
+
+    .icon-btn.secondary {
+      color: var(--primary);
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .icon-btn.success {
+      background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+      color: var(--green);
+      border: 1px solid var(--green-line);
+      box-shadow: none;
+    }
+
+    .icon-btn.danger {
+      background: linear-gradient(135deg, #fef2f2, #fee2e2);
+      color: var(--red);
+      border: 1px solid var(--red-line);
+      box-shadow: none;
+    }
+
+    .icon-btn.amber {
+      background: linear-gradient(135deg, #fffbeb, #fef3c7);
+      color: var(--amber);
+      border: 1px solid var(--amber-line);
+      box-shadow: none;
+    }
+
+    .icon-btn.purple {
+      background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+      color: var(--purple);
+      border: 1px solid var(--purple-line);
+      box-shadow: none;
+    }
+
+    .icon-btn.cyan {
+      background: linear-gradient(135deg, #ecfeff, #cffafe);
+      color: var(--cyan);
+      border: 1px solid var(--cyan-line);
+      box-shadow: none;
+    }
+
+    .icon-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .icon {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .main {
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 16px 22px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: hidden;
+    }
+
+    .search-panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 15px;
+      box-shadow: var(--shadow);
+      flex: 0 0 auto;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr 210px 190px 180px auto auto;
+      gap: 9px;
+      align-items: center;
+    }
+
+    .search-input,
+    .filter-select,
+    .form-input {
+      width: 100%;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      font-size: 14px;
+      outline: none;
+      background: #ffffff;
+      color: var(--text);
+      min-height: 42px;
+    }
+
+    .search-input:focus,
+    .filter-select:focus,
+    .form-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
+    }
+
+    .error {
+      margin-top: 12px;
+      padding: 13px;
+      border-radius: 14px;
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+      display: none;
+      white-space: pre-wrap;
+      font-size: 13px;
+    }
+
+    .table-card {
+      flex: 1 1 auto;
+      min-height: 0;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .table-header {
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+      flex: 0 0 auto;
+    }
+
+    .table-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 900;
+      color: var(--primary);
+    }
+
+    .table-wrapper {
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      background: #ffffff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      min-width: 1100px;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      text-align: left;
+      padding: 12px 13px;
+      font-size: 12px;
+      color: #374151;
+      background: #f9fafb;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tbody td {
+      padding: 11px 13px;
+      font-size: 13px;
+      color: #111827;
+      border-bottom: 1px solid #f1f5f9;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    tbody tr {
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    tbody tr:hover {
+      background: #eff6ff;
+    }
+
+    .empty,
+    .loading {
+      padding: 42px;
+      text-align: center;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .loading {
+      color: var(--accent);
+    }
+
+    mark {
+      background: #fef08a;
+      color: #111827;
+      padding: 0 2px;
+      border-radius: 3px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 8px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 800;
+      border: 1px solid var(--gray-line);
+      background: var(--gray-bg);
+      color: #374151;
+      line-height: 1.2;
+    }
+
+    .status-badge.active {
+      background: var(--green-bg);
+      border-color: var(--green-line);
+      color: var(--green);
+    }
+
+    .status-badge.resign {
+      background: var(--red-bg);
+      border-color: var(--red-line);
+      color: var(--red);
+    }
+
+    .profile-overlay,
+    .settings-overlay,
+    .birthday-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, 0.45);
+      z-index: 100;
+      padding: 12px;
+    }
+
+    .settings-overlay,
+    .birthday-overlay {
+      z-index: 120;
+    }
+
+    .profile-overlay.active,
+    .settings-overlay.active,
+    .birthday-overlay.active {
+      display: flex;
+    }
+
+    .profile-card {
+      width: min(1180px, 100%);
+      max-height: calc(100vh - 24px);
+      background: #ffffff;
+      border-radius: 22px;
+      box-shadow: 0 30px 100px rgba(15, 23, 42, 0.28);
+      border: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .profile-card.capture-mode {
+      max-height: none !important;
+      overflow: visible !important;
+    }
+
+    .profile-card.capture-mode .profile-actions,
+    .profile-card.capture-mode .photo-action,
+    .profile-card.capture-mode .copy-mini-btn {
+      display: none !important;
+    }
+
+    .profile-header {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: 152px 1fr auto;
+      gap: 14px;
+      padding: 14px;
+      background: linear-gradient(135deg, #eff6ff, #ffffff 64%);
+      border-bottom: 1px solid var(--line);
+      align-items: center;
+    }
+
+    .photo-zone {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .profile-photo-box {
+      width: 105px;
+      height: 126px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #e5e7eb;
+      border: 1px solid #d1d5db;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+    }
+
+    .photo-action {
+      width: 39px;
+      height: 39px;
+      border-radius: 13px;
+      flex: 0 0 auto;
+    }
+
+    .profile-photo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .profile-initial {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      background: linear-gradient(135deg, #2563eb, #0f172a);
+      font-size: 30px;
+      font-weight: 900;
+    }
+
+    .profile-main {
+      min-width: 0;
+    }
+
+    .profile-kicker {
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .profile-name {
+      margin: 0;
+      color: var(--primary);
+      font-size: clamp(22px, 3vw, 34px);
+      line-height: 1.03;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      word-break: break-word;
+    }
+
+    .profile-subtitle {
+      margin: 6px 0 0;
+      color: #4b5563;
+      font-size: 14px;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+
+    .profile-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 9px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 8px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: #374151;
+      font-size: 11.5px;
+      font-weight: 800;
+      border: 1px solid var(--line);
+    }
+
+    .badge.blue {
+      background: var(--accent-soft);
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+    }
+
+    .badge.green {
+      background: var(--green-bg);
+      color: var(--green);
+      border-color: var(--green-line);
+    }
+
+    .profile-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      align-items: stretch;
+    }
+
+    .profile-body {
+      flex: 1 1 auto;
+      overflow: hidden;
+      padding: 12px 14px 14px;
+    }
+
+    .section-title {
+      margin: 0 0 9px;
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .detail-item {
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: #ffffff;
+      padding: 8px 9px;
+      min-height: 52px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .detail-label {
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    .detail-value {
+      color: #111827;
+      font-size: 12px;
+      line-height: 1.22;
+      word-break: break-word;
+      white-space: normal;
+    }
+
+    .copy-mini-btn {
+      width: 25px;
+      height: 25px;
+      min-width: 25px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 9px;
+      background: #f8fafc;
+      color: #334155;
+      border: 1px solid var(--line);
+      box-shadow: none;
+      cursor: pointer;
+    }
+
+    .profile-card.layout-executive {
+      width: min(980px, 100%);
+    }
+
+    .profile-card.layout-executive .profile-header {
+      grid-template-columns: 185px 1fr auto;
+      background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.13), transparent 35%),
+        linear-gradient(135deg, #ffffff, #eff6ff);
+    }
+
+    .profile-card.layout-executive .profile-photo-box {
+      width: 138px;
+      height: 168px;
+      border-radius: 20px;
+    }
+
+    .profile-card.layout-executive .profile-name {
+      font-size: clamp(26px, 3.4vw, 42px);
+    }
+
+    .profile-card.layout-executive .detail-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .profile-card.layout-minimal {
+      width: min(760px, 100%);
+    }
+
+    .profile-card.layout-minimal .profile-header {
+      grid-template-columns: 92px 1fr auto;
+      padding: 12px;
+    }
+
+    .profile-card.layout-minimal .profile-photo-box {
+      width: 82px;
+      height: 98px;
+      border-radius: 15px;
+    }
+
+    .profile-card.layout-minimal .profile-name {
+      font-size: 22px;
+    }
+
+    .profile-card.layout-minimal .detail-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .settings-card {
+      width: min(560px, 100%);
+      background: #ffffff;
+      border-radius: 22px;
+      padding: 20px;
+      box-shadow: 0 30px 100px rgba(15, 23, 42, 0.30);
+      border: 1px solid var(--line);
+      max-height: 94vh;
+      overflow: auto;
+    }
+
+    .birthday-card {
+      width: min(1120px, 100%);
+      background: #ffffff;
+      border-radius: 22px;
+      padding: 20px;
+      box-shadow: 0 30px 100px rgba(15, 23, 42, 0.30);
+      border: 1px solid var(--line);
+      max-height: 94vh;
+      overflow: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .modal-title {
+      margin: 0;
+      font-size: 19px;
+      font-weight: 900;
+      color: var(--primary);
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #374151;
+    }
+
+    .form-help {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .logo-preview-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      padding: 12px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 16px;
+      background: #f8fafc;
+    }
+
+    .logo-preview {
+      width: 90px;
+      height: 90px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #e2e8f0;
+      border: 1px solid #cbd5e1;
+      display: grid;
+      place-items: center;
+      color: #0f172a;
+      font-weight: 900;
+      font-size: 24px;
+      flex: 0 0 auto;
+    }
+
+    .logo-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 9px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .birthday-toolbar {
+      display: grid;
+      grid-template-columns: 1fr 190px 170px 160px auto;
+      gap: 9px;
+      margin-bottom: 12px;
+    }
+
+    .birthday-table-wrap {
+      max-height: 62vh;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .birthday-table {
+      min-width: 980px;
+    }
+
+    .toast-wrap {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .toast {
+      min-width: 280px;
+      max-width: 360px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      box-shadow: 0 22px 60px rgba(15, 23, 42, 0.18);
+      border-radius: 18px;
+      padding: 13px 14px;
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 10px;
+      align-items: start;
+      animation: toastIn 0.22s ease;
+    }
+
+    .toast-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .toast.success .toast-icon {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    .toast.error .toast-icon {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .toast-title {
+      font-weight: 900;
+      color: var(--primary);
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+
+    .toast-message {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff !important;
+      }
+
+      body * {
+        visibility: hidden !important;
+      }
+
+      .profile-overlay,
+      .profile-overlay *,
+      .profile-card,
+      .profile-card * {
+        visibility: visible !important;
+      }
+
+      .profile-overlay {
+        position: static !important;
+        display: block !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+      }
+
+      .profile-card {
+        width: 100% !important;
+        max-height: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        overflow: visible !important;
+      }
+
+      .profile-body {
+        overflow: visible !important;
+      }
+
+      .profile-actions,
+      .photo-action,
+      .copy-mini-btn {
+        display: none !important;
+      }
+
+      .detail-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+      }
+    }
+
+    @media (max-width: 1200px) {
+      html, body {
+        overflow: auto;
+      }
+
+      .app {
+        height: auto;
+        overflow: visible;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .header-stats {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .main {
+        overflow: visible;
+      }
+
+      .toolbar,
+      .birthday-toolbar {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+
+      .detail-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .toolbar,
+      .birthday-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .brand-title {
+        white-space: normal;
+        font-size: 18px;
+      }
+
+      .header-stat {
+        flex: 1;
+        min-width: 92px;
+      }
+
+      .profile-header {
+        grid-template-columns: 1fr;
+      }
+
+      .profile-actions {
+        flex-direction: row;
+        justify-content: flex-end;
+      }
+
+      .detail-grid,
+      .profile-card.layout-executive .detail-grid,
+      .profile-card.layout-minimal .detail-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .profile-body {
+        overflow: auto;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <svg style="display:none">
+    <symbol id="icon-settings" viewBox="0 0 24 24">
+      <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path>
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.37a1.7 1.7 0 0 0-1 .57 1.7 1.7 0 0 0-.5 1.2V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-.5-1.2 1.7 1.7 0 0 0-1-.57 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 3.63 15a1.7 1.7 0 0 0-.57-1 1.7 1.7 0 0 0-1.2-.5H2a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.2-.5 1.7 1.7 0 0 0 .57-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1-.57 1.7 1.7 0 0 0 .5-1.2V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 .5 1.2 1.7 1.7 0 0 0 1 .57 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 20.37 9c.2.36.5.7.88 1 .36.31.78.5 1.25.5H22a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.2.5 1.7 1.7 0 0 0-.57 1Z"></path>
+    </symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24">
+      <path d="M21 12a9 9 0 0 1-15.3 6.36"></path>
+      <path d="M3 12A9 9 0 0 1 18.3 5.64"></path>
+      <path d="M18 2v4h4"></path>
+      <path d="M6 22v-4H2"></path>
+    </symbol>
+    <symbol id="icon-reset" viewBox="0 0 24 24">
+      <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+      <path d="M3 4v6h6"></path>
+    </symbol>
+    <symbol id="icon-image" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+      <path d="m8 13 2.5-2.5L15 15"></path>
+      <path d="m14 14 1.5-1.5L20 17"></path>
+      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+    </symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24">
+      <path d="M12 3v12"></path>
+      <path d="m7 10 5 5 5-5"></path>
+      <path d="M5 21h14"></path>
+    </symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24">
+      <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+      <rect x="4" y="4" width="11" height="11" rx="2"></rect>
+    </symbol>
+    <symbol id="icon-print" viewBox="0 0 24 24">
+      <path d="M6 9V3h12v6"></path>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <path d="M6 14h12v7H6z"></path>
+    </symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24">
+      <path d="M18 6 6 18"></path>
+      <path d="m6 6 12 12"></path>
+    </symbol>
+    <symbol id="icon-save" viewBox="0 0 24 24">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"></path>
+      <path d="M17 21v-8H7v8"></path>
+      <path d="M7 3v5h8"></path>
+    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24">
+      <path d="M3 6h18"></path>
+      <path d="M8 6V4h8v2"></path>
+      <path d="M19 6l-1 14H6L5 6"></path>
+      <path d="M10 11v5"></path>
+      <path d="M14 11v5"></path>
+    </symbol>
+    <symbol id="icon-cake" viewBox="0 0 24 24">
+      <path d="M4 21h16"></path>
+      <path d="M4 14h16v7H4z"></path>
+      <path d="M4 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2"></path>
+      <path d="M12 7v5"></path>
+      <path d="M12 3c1 1 1.5 2 .5 3-.2.2-.8.2-1 0-1-1-.5-2 .5-3Z"></path>
+    </symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24">
+      <path d="M20 6 9 17l-5-5"></path>
+    </symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24">
+      <path d="M12 9v4"></path>
+      <path d="M12 17h.01"></path>
+      <path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z"></path>
+    </symbol>
+    <symbol id="icon-layout" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+      <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+      <rect x="3" y="14" width="18" height="7" rx="1"></rect>
+    </symbol>
+    <symbol id="icon-file" viewBox="0 0 24 24">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path>
+      <path d="M14 2v6h6"></path>
+      <path d="M8 13h8"></path>
+      <path d="M8 17h6"></path>
+    </symbol>
+  </svg>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" id="appLogo">HL</div>
+        <div>
+          <h1 class="brand-title" id="appTitle">Pencarian Cepat Data Karyawan PT Hop Lun Indonesia</h1>
+          <p class="brand-subtitle">Database karyawan</p>
+        </div>
+      </div>
+
+      <div class="header-stats">
+        <div class="header-stat blue">
+          <span>Total</span>
+          <strong id="totalSummary">0</strong>
+        </div>
+        <div class="header-stat green">
+          <span>Tampil</span>
+          <strong id="filteredSummary">0</strong>
+        </div>
+        <div class="header-stat">
+          <span>Worker</span>
+          <strong id="workerSummary">0</strong>
+        </div>
+        <div class="header-stat">
+          <span>Staff</span>
+          <strong id="staffSummary">0</strong>
+        </div>
+        <div class="header-stat">
+          <span>Manager</span>
+          <strong id="managerSummary">0</strong>
+        </div>
+        <div class="header-stat">
+          <span>Expat</span>
+          <strong id="expatSummary">0</strong>
+        </div>
+        <div class="header-stat amber">
+          <span>Unit 1</span>
+          <strong id="unit1Summary">0</strong>
+        </div>
+        <div class="header-stat amber">
+          <span>Unit 2</span>
+          <strong id="unit2Summary">0</strong>
+        </div>
+
+        <div class="top-actions">
+          <button class="icon-btn purple" onclick="openSettings()" title="Pengaturan">
+            <svg class="icon"><use href="#icon-settings"></use></svg>
+          </button>
+          <button class="icon-btn amber" onclick="openBirthdayMenu()" title="Ulang tahun minggu ini">
+            <svg class="icon"><use href="#icon-cake"></use></svg>
+          </button>
+          <button class="icon-btn cyan" onclick="reloadData()" title="Refresh data">
+            <svg class="icon"><use href="#icon-refresh"></use></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="search-panel">
+        <div class="toolbar">
+          <input
+            type="text"
+            id="searchInput"
+            class="search-input"
+            placeholder="Cari cepat semua kolom..."
+            autocomplete="off"
+          >
+
+          <select id="departmentFilter" class="filter-select" onchange="applySearch()">
+            <option value="">Semua Section</option>
+          </select>
+
+          <select id="branchFilter" class="filter-select" onchange="applySearch()">
+            <option value="">Semua Cabang</option>
+          </select>
+
+          <select id="statusFilter" class="filter-select" onchange="applySearch()">
+            <option value="">Semua Status</option>
+          </select>
+
+          <button onclick="clearSearch()" class="icon-btn secondary" title="Reset pencarian dan filter">
+            <svg class="icon"><use href="#icon-reset"></use></svg>
+          </button>
+
+          <button onclick="downloadExcel()" class="icon-btn success" title="Download Excel">
+            <svg class="icon"><use href="#icon-download"></use></svg>
+          </button>
+        </div>
+
+        <div id="errorBox" class="error"></div>
+      </section>
+
+      <section class="table-card">
+        <div class="table-header">
+          <h2 class="table-title">Data Karyawan</h2>
+        </div>
+
+        <div class="table-wrapper">
+          <div id="tableContainer" class="loading">Memuat data...</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="profile-overlay" id="profileOverlay">
+    <div class="profile-card layout-compact" id="profileCard">
+      <div class="profile-header">
+        <div class="photo-zone">
+          <div class="profile-photo-box" id="profilePhotoBox">
+            <div class="profile-initial">HL</div>
+          </div>
+
+          <button id="copyPhotoBtn" class="icon-btn success photo-action" onclick="copyOnlyEmployeePhoto()" disabled title="Copy foto saja">
+            <svg class="icon"><use href="#icon-image"></use></svg>
+          </button>
+        </div>
+
+        <div class="profile-main">
+          <div class="profile-kicker">Profil Karyawan</div>
+          <h2 class="profile-name" id="profileName">-</h2>
+          <p class="profile-subtitle" id="profileSubtitle">-</p>
+
+          <div class="profile-badges">
+            <div class="badge blue" id="profileIdBadge">ID: -</div>
+            <div class="badge" id="profileAgeBadge">Usia: -</div>
+            <div class="badge green" id="profileWorkBadge">Masa Kerja: -</div>
+            <div class="status-badge" id="profileStatusBadge">Status: -</div>
+          </div>
+        </div>
+
+        <div class="profile-actions">
+          <button class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">
+            <svg class="icon"><use href="#icon-file"></use></svg>
+          </button>
+          <button class="icon-btn amber" onclick="cycleProfileLayout()" title="Ganti layout profil">
+            <svg class="icon"><use href="#icon-layout"></use></svg>
+          </button>
+          <button class="icon-btn secondary" onclick="printProfile()" title="Print / Export PDF">
+            <svg class="icon"><use href="#icon-print"></use></svg>
+          </button>
+          <button class="icon-btn danger" onclick="closeProfile()" title="Tutup">
+            <svg class="icon"><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="profile-body">
+        <h3 class="section-title">Data Lengkap</h3>
+        <div class="detail-grid" id="detailGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-overlay" id="settingsOverlay" onclick="settingsOverlayClick(event)">
+    <div class="settings-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Pengaturan Aplikasi</h3>
+        <button class="icon-btn danger" onclick="closeSettings()" title="Tutup">
+          <svg class="icon"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Nama Aplikasi</label>
+        <input class="form-input" id="settingAppTitle" placeholder="Nama aplikasi">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Default Layout Profil</label>
+        <select class="form-input" id="settingProfileLayout">
+          <option value="compact">Compact</option>
+          <option value="executive">Executive</option>
+          <option value="minimal">Minimal</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Upload Logo / Foto Perusahaan</label>
+        <input type="file" class="form-input" id="settingLogoFile" accept="image/*" onchange="handleLogoUpload(event)">
+        <div class="form-help">Gambar akan disimpan di browser perangkat ini.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Preview Logo / Foto</label>
+        <div class="logo-preview-wrap">
+          <div class="logo-preview" id="settingsLogoPreview">HL</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="icon-btn danger" onclick="resetSettings()" title="Reset">
+          <svg class="icon"><use href="#icon-trash"></use></svg>
+        </button>
+        <button class="icon-btn secondary" onclick="closeSettings()" title="Batal">
+          <svg class="icon"><use href="#icon-close"></use></svg>
+        </button>
+        <button class="icon-btn success" onclick="saveSettings()" title="Simpan">
+          <svg class="icon"><use href="#icon-save"></use></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="birthday-overlay" id="birthdayOverlay" onclick="birthdayOverlayClick(event)">
+    <div class="birthday-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Ulang Tahun Minggu Ini</h3>
+        <button class="icon-btn danger" onclick="closeBirthdayMenu()" title="Tutup">
+          <svg class="icon"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+
+      <div class="birthday-toolbar">
+        <input id="birthdaySearchInput" class="form-input" placeholder="Cari No ID / Nama / Section..." oninput="applyBirthdayFilter()">
+
+        <select id="birthdayDeptFilter" class="form-input" onchange="applyBirthdayFilter()">
+          <option value="">Semua Section</option>
+        </select>
+
+        <select id="birthdayBranchFilter" class="form-input" onchange="applyBirthdayFilter()">
+          <option value="">Semua Cabang</option>
+        </select>
+
+        <select id="birthdayStatusFilter" class="form-input" onchange="applyBirthdayFilter()">
+          <option value="">Semua Status</option>
+        </select>
+
+        <button class="icon-btn success" onclick="exportBirthdayExcel()" title="Export ulang tahun ke Excel">
+          <svg class="icon"><use href="#icon-download"></use></svg>
+        </button>
+      </div>
+
+      <div id="birthdayTableContainer" class="birthday-table-wrap"></div>
+    </div>
+  </div>
+
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <script>
+    let allHeaders = [];
+    let allRows = [];
+    let filteredRows = [];
+    let selectedPhotoFileId = '';
+    let selectedPhotoDataUrl = '';
+    let uploadedLogoDataUrl = '';
+    let currentProfileRow = null;
+    let searchTimer = null;
+
+    let birthdayRows = [];
+    let filteredBirthdayRows = [];
+
+    let filterHeaders = {
+      section: '',
+      department: '',
+      branch: '',
+      status: '',
+      employeeType: '',
+      birthDate: '',
+      position: '',
+      exitDate: ''
+    };
+
+    let defaultConfig = {
+      appTitle: 'Pencarian Cepat Data Karyawan PT Hop Lun Indonesia'
+    };
+
+    const profileLayouts = ['compact', 'executive', 'minimal'];
+    const MAX_RENDER_ROWS = 1500;
+
+    document.addEventListener('DOMContentLoaded', function () {
+      loadConfig();
+      reloadData();
+
+      document
+        .getElementById('searchInput')
+        .addEventListener('input', function () {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(applySearch, 120);
+        });
+    });
+
+    function loadConfig() {
+      google.script.run
+        .withSuccessHandler(function (config) {
+          defaultConfig = config || defaultConfig;
+          applySavedSettings();
+        })
+        .withFailureHandler(function () {
+          applySavedSettings();
+        })
+        .getAppConfig();
+    }
+
+    function applySavedSettings() {
+      const savedTitle = localStorage.getItem('appTitle') || defaultConfig.appTitle;
+      const savedLogoDataUrl = localStorage.getItem('logoDataUrl') || '';
+
+      document.getElementById('appTitle').textContent = savedTitle || defaultConfig.appTitle;
+      document.title = savedTitle || defaultConfig.appTitle;
+
+      renderLogo(savedLogoDataUrl);
+      applyProfileLayout(getDefaultProfileLayout());
+    }
+
+    function getDefaultProfileLayout() {
+      return localStorage.getItem('profileLayout') || 'compact';
+    }
+
+    function applyProfileLayout(layout) {
+      const card = document.getElementById('profileCard');
+      if (!card) return;
+
+      profileLayouts.forEach(item => {
+        card.classList.remove('layout-' + item);
+      });
+
+      card.classList.add('layout-' + layout);
+    }
+
+    function cycleProfileLayout() {
+      const current = getDefaultProfileLayout();
+      const currentIndex = profileLayouts.indexOf(current);
+      const next = profileLayouts[(currentIndex + 1) % profileLayouts.length];
+
+      localStorage.setItem('profileLayout', next);
+      applyProfileLayout(next);
+
+      showToast('Layout profil diganti ke ' + next.toUpperCase() + '.', 'success', 'Layout');
+    }
+
+    function renderLogo(source) {
+      const logo = document.getElementById('appLogo');
+
+      if (source) {
+        logo.innerHTML = `<img src="${escapeAttribute(source)}" onerror="this.parentNode.textContent='HL'">`;
+      } else {
+        logo.textContent = 'HL';
+      }
+    }
+
+    function openSettings() {
+      const savedTitle = localStorage.getItem('appTitle') || defaultConfig.appTitle || '';
+      uploadedLogoDataUrl = localStorage.getItem('logoDataUrl') || '';
+
+      document.getElementById('settingAppTitle').value = savedTitle;
+      document.getElementById('settingProfileLayout').value = getDefaultProfileLayout();
+      document.getElementById('settingLogoFile').value = '';
+
+      refreshSettingsPreview();
+
+      document.getElementById('settingsOverlay').classList.add('active');
+      document.body.classList.add('lock-scroll');
+    }
+
+    function closeSettings() {
+      document.getElementById('settingsOverlay').classList.remove('active');
+
+      if (
+        !document.getElementById('profileOverlay').classList.contains('active') &&
+        !document.getElementById('birthdayOverlay').classList.contains('active')
+      ) {
+        document.body.classList.remove('lock-scroll');
+      }
+    }
+
+    function settingsOverlayClick(event) {
+      if (event.target.id === 'settingsOverlay') {
+        closeSettings();
+      }
+    }
+
+    function handleLogoUpload(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      resizeImageFile(file, 512, function (dataUrl) {
+        uploadedLogoDataUrl = dataUrl;
+        refreshSettingsPreview();
+      });
+    }
+
+    function resizeImageFile(file, maxSize, callback) {
+      const reader = new FileReader();
+
+      reader.onload = function (e) {
+        const img = new Image();
+
+        img.onload = function () {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > maxSize) {
+            height = Math.round(height * (maxSize / width));
+            width = maxSize;
+          } else if (height > maxSize) {
+            width = Math.round(width * (maxSize / height));
+            height = maxSize;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          callback(canvas.toDataURL('image/png'));
+        };
+
+        img.src = e.target.result;
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    function refreshSettingsPreview() {
+      const preview = document.getElementById('settingsLogoPreview');
+
+      if (uploadedLogoDataUrl) {
+        preview.innerHTML = `<img src="${escapeAttribute(uploadedLogoDataUrl)}" onerror="this.parentNode.textContent='HL'">`;
+      } else {
+        preview.textContent = 'HL';
+      }
+    }
+
+    function saveSettings() {
+      const appTitle = document.getElementById('settingAppTitle').value.trim();
+      const layout = document.getElementById('settingProfileLayout').value || 'compact';
+
+      localStorage.setItem('appTitle', appTitle || defaultConfig.appTitle || '');
+      localStorage.setItem('profileLayout', layout);
+
+      if (uploadedLogoDataUrl) {
+        localStorage.setItem('logoDataUrl', uploadedLogoDataUrl);
+      } else {
+        localStorage.removeItem('logoDataUrl');
+      }
+
+      applySavedSettings();
+      closeSettings();
+      showToast('Pengaturan berhasil disimpan.', 'success', 'Berhasil');
+    }
+
+    function resetSettings() {
+      localStorage.removeItem('appTitle');
+      localStorage.removeItem('logoDataUrl');
+      localStorage.removeItem('profileLayout');
+      uploadedLogoDataUrl = '';
+      applySavedSettings();
+      closeSettings();
+      showToast('Pengaturan dikembalikan ke default.', 'success', 'Reset');
+    }
+
+    function reloadData() {
+      hideError();
+
+      document.getElementById('tableContainer').className = 'loading';
+      document.getElementById('tableContainer').innerHTML = 'Memuat data...';
+
+      google.script.run
+        .withSuccessHandler(function (result) {
+          allHeaders = result.headers || [];
+          allRows = result.rows || [];
+          filteredRows = [...allRows];
+
+          detectFilterHeaders();
+          buildFilters();
+          updateHeaderStats();
+          applySearch();
+
+          showToast('Data dan foto berhasil dimuat.', 'success', 'Refresh');
+        })
+        .withFailureHandler(function (error) {
+          showError(error && error.message ? error.message : String(error));
+          document.getElementById('tableContainer').className = 'empty';
+          document.getElementById('tableContainer').innerHTML = 'Gagal memuat data.';
+        })
+        .getSheetData();
+    }
+
+    function detectFilterHeaders() {
+      filterHeaders.section = findHeaderByAliases([
+        'section',
+        'seksi',
+        'departemen',
+        'department',
+        'divisi',
+        'division',
+        'bagian',
+        'dept'
+      ]);
+
+      filterHeaders.department = filterHeaders.section;
+
+      filterHeaders.branch = findHeaderByAliases([
+        'cabang',
+        'branch',
+        'unit',
+        'plant',
+        'lokasi',
+        'location'
+      ]);
+
+      filterHeaders.status = findHeaderByAliases([
+        'status',
+        'status karyawan',
+        'employee status',
+        'jenis karyawan',
+        'kategori',
+        'kategori karyawan',
+        'employee type',
+        'type'
+      ]);
+
+      filterHeaders.employeeType = findHeaderByAliases([
+        'status',
+        'jenis karyawan',
+        'kategori',
+        'kategori karyawan',
+        'employee type',
+        'tipe karyawan',
+        'type'
+      ]);
+
+      filterHeaders.birthDate = findHeaderByAliases([
+        'tanggal lahir',
+        'tgl lahir',
+        'tanngal lahir',
+        'tanggallahir',
+        'tanggal_lahir',
+        'date of birth',
+        'birth date',
+        'birthdate',
+        'dob',
+        'lahir'
+      ]);
+
+      filterHeaders.position = findHeaderByAliases([
+        'jabatan',
+        'posisi',
+        'position',
+        'job title',
+        'title'
+      ]);
+
+      filterHeaders.exitDate = findHeaderByAliases([
+        'tanggal keluar',
+        'tgl keluar',
+        'resign date',
+        'date resign',
+        'tanggal resign',
+        'keluar'
+      ]);
+    }
+
+    function findHeaderByAliases(aliases) {
+      const normalizedHeaders = allHeaders.map(normalizeText);
+      const normalizedAliases = aliases.map(normalizeText);
+
+      for (let i = 0; i < normalizedHeaders.length; i++) {
+        if (normalizedAliases.includes(normalizedHeaders[i])) {
+          return allHeaders[i];
+        }
+      }
+
+      for (let i = 0; i < normalizedHeaders.length; i++) {
+        for (const alias of normalizedAliases) {
+          if (normalizedHeaders[i].includes(alias)) {
+            return allHeaders[i];
+          }
+        }
+      }
+
+      return '';
+    }
+
+    function buildFilters() {
+      buildSelectFilter('departmentFilter', filterHeaders.section, 'Semua Section');
+      buildSelectFilter('branchFilter', filterHeaders.branch, 'Semua Cabang');
+      buildSelectFilter('statusFilter', filterHeaders.status, 'Semua Status');
+    }
+
+    function buildSelectFilter(selectId, headerName, defaultLabel) {
+      const select = document.getElementById(selectId);
+      select.innerHTML = `<option value="">${defaultLabel}</option>`;
+
+      if (!headerName) {
+        select.disabled = true;
+        return;
+      }
+
+      select.disabled = false;
+
+      const values = [...new Set(
+        allRows
+          .map(row => String(row[headerName] || '').trim())
+          .filter(Boolean)
+      )].sort((a, b) => a.localeCompare(b));
+
+      values.forEach(function (value) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      });
+    }
+
+    function updateHeaderStats() {
+      const counts = {
+        worker: 0,
+        staff: 0,
+        manager: 0,
+        expat: 0,
+        unit1: 0,
+        unit2: 0
+      };
+
+      allRows.forEach(function (row) {
+        const type = getEmployeeType(row);
+        const branch = normalizeText(filterHeaders.branch ? row[filterHeaders.branch] : '');
+
+        if (type === 'WORKER') counts.worker++;
+        if (type === 'STAFF') counts.staff++;
+        if (type === 'MANAGER') counts.manager++;
+        if (type === 'EXPAT') counts.expat++;
+
+        if (branch.includes('unit 1') || branch.includes('unit1')) counts.unit1++;
+        if (branch.includes('unit 2') || branch.includes('unit2')) counts.unit2++;
+      });
+
+      document.getElementById('totalSummary').textContent = allRows.length;
+      document.getElementById('workerSummary').textContent = counts.worker;
+      document.getElementById('staffSummary').textContent = counts.staff;
+      document.getElementById('managerSummary').textContent = counts.manager;
+      document.getElementById('expatSummary').textContent = counts.expat;
+      document.getElementById('unit1Summary').textContent = counts.unit1;
+      document.getElementById('unit2Summary').textContent = counts.unit2;
+    }
+
+    function getEmployeeType(row) {
+      const sources = [];
+
+      if (filterHeaders.employeeType) sources.push(row[filterHeaders.employeeType]);
+      if (filterHeaders.status) sources.push(row[filterHeaders.status]);
+      if (filterHeaders.position) sources.push(row[filterHeaders.position]);
+
+      const text = normalizeText(sources.join(' '));
+
+      if (text.includes('expat') || text.includes('expert') || text.includes('expatriate')) return 'EXPAT';
+      if (text.includes('manager') || text.includes('mgr') || text.includes('manajer')) return 'MANAGER';
+      if (text.includes('worker') || text.includes('operator') || text.includes('opr') || text.includes('buruh')) return 'WORKER';
+      if (text.includes('staff') || text.includes('staf')) return 'STAFF';
+
+      return '';
+    }
+
+    function applySearch() {
+      const keyword = normalizeText(document.getElementById('searchInput').value);
+      const sectionValue = document.getElementById('departmentFilter').value;
+      const branchValue = document.getElementById('branchFilter').value;
+      const statusValue = document.getElementById('statusFilter').value;
+
+      const terms = keyword.split(' ').filter(Boolean);
+
+      filteredRows = allRows.filter(function (row) {
+        const rowText = normalizeText(
+          allHeaders.map(header => row[header] || '').join(' ')
+        );
+
+        const matchKeyword = !keyword || terms.every(term => rowText.includes(term));
+
+        const matchSection =
+          !sectionValue ||
+          !filterHeaders.section ||
+          String(row[filterHeaders.section] || '') === sectionValue;
+
+        const matchBranch =
+          !branchValue ||
+          !filterHeaders.branch ||
+          String(row[filterHeaders.branch] || '') === branchValue;
+
+        const matchStatus =
+          !statusValue ||
+          !filterHeaders.status ||
+          String(row[filterHeaders.status] || '') === statusValue;
+
+        return matchKeyword && matchSection && matchBranch && matchStatus;
+      });
+
+      document.getElementById('filteredSummary').textContent = filteredRows.length;
+      renderTable(keyword);
+    }
+
+    function renderTable(keyword) {
+      const container = document.getElementById('tableContainer');
+      container.className = '';
+
+      if (!allHeaders.length) {
+        container.className = 'empty';
+        container.innerHTML = 'Tidak ada header/kolom di sheet.';
+        return;
+      }
+
+      if (!filteredRows.length) {
+        container.className = 'empty';
+        container.innerHTML = 'Data tidak ditemukan.';
+        return;
+      }
+
+      const rowsToRender = filteredRows.slice(0, MAX_RENDER_ROWS);
+
+      let html = '<table>';
+      html += '<thead><tr>';
+
+      allHeaders.forEach(function (header) {
+        html += '<th>' + escapeHtml(header) + '</th>';
+      });
+
+      html += '</tr></thead>';
+      html += '<tbody>';
+
+      rowsToRender.forEach(function (row, index) {
+        html += '<tr onclick="openProfile(' + index + ')">';
+
+        allHeaders.forEach(function (header) {
+          html += '<td>' + renderTableCell(row, header, keyword) + '</td>';
+        });
+
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+
+      if (filteredRows.length > MAX_RENDER_ROWS) {
+        html += `<div class="empty">Menampilkan ${MAX_RENDER_ROWS} dari ${filteredRows.length} data.</div>`;
+      }
+
+      container.innerHTML = html;
+    }
+
+    function renderTableCell(row, header, keyword) {
+      const value = row[header] == null ? '' : String(row[header]);
+
+      if (filterHeaders.status && header === filterHeaders.status) {
+        return renderStatusBadge(value, row);
+      }
+
+      return highlightText(value, keyword);
+    }
+
+    function openProfile(index) {
+      const row = filteredRows[index];
+      openProfileFromRow(row);
+    }
+
+    function openProfileFromRow(row) {
+      if (!row) return;
+
+      currentProfileRow = row;
+
+      const profile = row._profile || {};
+      selectedPhotoFileId = profile.photoFileId || '';
+      selectedPhotoDataUrl = '';
+
+      applyProfileLayout(getDefaultProfileLayout());
+
+      const statusValue = getDisplayStatus(row);
+
+      document.getElementById('profileName').textContent =
+        profile.name && profile.name !== '-' ? profile.name : 'Tanpa Nama';
+
+      document.getElementById('profileSubtitle').textContent =
+        [
+          getSectionValue(row),
+          profile.branch && profile.branch !== '-' ? profile.branch : ''
+        ]
+          .filter(value => value && value !== '-')
+          .join(' • ') || 'Profil karyawan';
+
+      document.getElementById('profileIdBadge').textContent = 'ID: ' + (profile.id || '-');
+      document.getElementById('profileAgeBadge').textContent = 'Usia: ' + (profile.age || '-');
+      document.getElementById('profileWorkBadge').textContent = 'Masa Kerja: ' + (profile.workPeriod || '-');
+
+      const statusBadge = document.getElementById('profileStatusBadge');
+      statusBadge.className = 'status-badge ' + getStatusClass(statusValue, row);
+      statusBadge.textContent = 'Status: ' + statusValue;
+
+      renderProfilePhoto(profile);
+      renderDetailGrid(row);
+
+      document.getElementById('profileOverlay').classList.add('active');
+      document.body.classList.add('lock-scroll');
+    }
+
+    function renderProfilePhoto(profile) {
+      const box = document.getElementById('profilePhotoBox');
+      const copyPhotoBtn = document.getElementById('copyPhotoBtn');
+      const initial = getInitials(profile.name || profile.id || 'HL');
+
+      showProfileInitial(initial);
+      selectedPhotoDataUrl = '';
+      copyPhotoBtn.disabled = true;
+
+      if (!profile.photoFileId) return;
+
+      box.innerHTML = '<div class="loading" style="padding:10px; font-size:12px;">Memuat foto...</div>';
+
+      google.script.run
+        .withSuccessHandler(function (dataUrl) {
+          if (selectedPhotoFileId !== profile.photoFileId) return;
+
+          if (dataUrl) {
+            selectedPhotoDataUrl = dataUrl;
+            copyPhotoBtn.disabled = false;
+
+            box.innerHTML = `
+              <img
+                class="profile-photo"
+                src="${escapeAttribute(dataUrl)}"
+                alt="Foto Profil"
+                onerror="showProfileInitial('${escapeAttribute(initial)}')"
+              >
+            `;
+          } else {
+            showProfileInitial(initial);
+            copyPhotoBtn.disabled = true;
+          }
+        })
+        .withFailureHandler(function () {
+          showProfileInitial(initial);
+          copyPhotoBtn.disabled = true;
+        })
+        .getPhotoAsDataUrl(profile.photoFileId);
+    }
+
+    function showProfileInitial(initial) {
+      document.getElementById('profilePhotoBox').innerHTML =
+        `<div class="profile-initial">${escapeHtml(initial || 'HL')}</div>`;
+    }
+
+    function renderDetailGrid(row) {
+      const grid = document.getElementById('detailGrid');
+      let html = '';
+
+      allHeaders.forEach(function (header) {
+        const value = row[header] == null || row[header] === ''
+          ? '-'
+          : String(row[header]);
+
+        const copyable = isCopyableHeader(header) && value !== '-';
+
+        html += `
+          <div class="detail-item">
+            <div class="detail-top">
+              <div class="detail-label">${escapeHtml(header)}</div>
+              ${copyable ? `
+                <button
+                  type="button"
+                  class="copy-mini-btn"
+                  title="Copy ${escapeHtml(header)}"
+                  data-copy="${escapeAttribute(value)}"
+                  data-label="${escapeAttribute(header)}"
+                  onclick="copyFromButton(event, this)"
+                >
+                  <svg class="icon" style="width:14px;height:14px;"><use href="#icon-copy"></use></svg>
+                </button>
+              ` : ''}
+            </div>
+            <div class="detail-value">
+              ${filterHeaders.status && header === filterHeaders.status
+                ? renderStatusBadge(value, row)
+                : escapeHtml(value)}
+            </div>
+          </div>
+        `;
+      });
+
+      grid.innerHTML = html;
+    }
+
+    function isCopyableHeader(header) {
+      const h = normalizeText(header);
+
+      return (
+        h === 'nik' ||
+        h === 'no ktp' ||
+        h === 'nomor ktp' ||
+        h.includes('ktp') ||
+        h.includes('bpjs kesehatan') ||
+        h.includes('no bpjs kesehatan') ||
+        h.includes('bpjamsostek') ||
+        h.includes('no kpj') ||
+        h.includes('kpj')
+      );
+    }
+
+    function renderStatusBadge(value, row) {
+      const cleanValue = String(value || '-').trim() || '-';
+      const statusClass = getStatusClass(cleanValue, row);
+      return `<span class="status-badge ${statusClass}">${escapeHtml(cleanValue)}</span>`;
+    }
+
+    function getDisplayStatus(row) {
+      if (filterHeaders.status) {
+        return String(row[filterHeaders.status] || '-').trim() || '-';
+      }
+
+      if (isResigned(row)) return 'KELUAR';
+      return 'AKTIF';
+    }
+
+    function isResigned(row) {
+      if (!row) return false;
+
+      if (filterHeaders.exitDate) {
+        const exitValue = String(row[filterHeaders.exitDate] || '').trim();
+        if (exitValue && exitValue !== '-') return true;
+      }
+
+      const statusValue = filterHeaders.status ? String(row[filterHeaders.status] || '') : '';
+      const v = normalizeText(statusValue);
+
+      return (
+        v.includes('resign') ||
+        v.includes('keluar') ||
+        v.includes('non aktif') ||
+        v.includes('nonaktif') ||
+        v.includes('inactive') ||
+        v.includes('tidak aktif')
+      );
+    }
+
+    function getStatusClass(value, row) {
+      if (isResigned(row)) return 'resign';
+
+      const v = normalizeText(value);
+
+      if (
+        v.includes('aktif') ||
+        v.includes('active') ||
+        v.includes('staff') ||
+        v.includes('worker') ||
+        v.includes('manager') ||
+        v.includes('expat') ||
+        v.includes('tetap') ||
+        v.includes('kontrak') ||
+        v.includes('probation')
+      ) {
+        return 'active';
+      }
+
+      return '';
+    }
+
+    function getSectionValue(row) {
+      if (filterHeaders.section) {
+        return String(row[filterHeaders.section] || '-').trim() || '-';
+      }
+
+      const profile = row._profile || {};
+      return profile.section || profile.department || '-';
+    }
+
+    async function copyProfileCardImage() {
+      const card = document.getElementById('profileCard');
+
+      if (!card) {
+        showToast('Profil belum tersedia.', 'error', 'Gagal');
+        return;
+      }
+
+      if (typeof html2canvas === 'undefined') {
+        showToast('Library copy gambar belum termuat. Periksa koneksi internet.', 'error', 'Gagal');
+        return;
+      }
+
+      try {
+        showToast('Sedang membuat gambar profil...', 'success', 'Memproses');
+
+        card.classList.add('capture-mode');
+
+        await new Promise(resolve => setTimeout(resolve, 180));
+
+        const canvas = await html2canvas(card, {
+          backgroundColor: '#ffffff',
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false
+        });
+
+        card.classList.remove('capture-mode');
+
+        canvas.toBlob(async function (blob) {
+          if (!blob) {
+            showToast('Gagal membuat gambar profil.', 'error', 'Gagal');
+            return;
+          }
+
+          try {
+            if (navigator.clipboard && window.ClipboardItem) {
+              await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': blob })
+              ]);
+
+              showToast('Gambar profil berhasil disalin.', 'success', 'Berhasil');
+            } else {
+              downloadProfileImageFromCanvas(canvas);
+              showToast('Browser tidak mendukung copy gambar. File PNG didownload otomatis.', 'success', 'Downloaded');
+            }
+          } catch (error) {
+            downloadProfileImageFromCanvas(canvas);
+            showToast('Copy clipboard gagal. File PNG didownload otomatis.', 'success', 'Downloaded');
+          }
+        }, 'image/png');
+      } catch (error) {
+        card.classList.remove('capture-mode');
+        showToast('Gagal copy gambar profil.', 'error', 'Gagal');
+      }
+    }
+
+    function downloadProfileImageFromCanvas(canvas) {
+      const profile = currentProfileRow && currentProfileRow._profile ? currentProfileRow._profile : {};
+      const fileName = 'Profil_' + String(profile.id || 'Karyawan').replace(/[^a-z0-9]/gi, '_') + '.png';
+
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function copyFromButton(event, button) {
+      event.stopPropagation();
+      const value = button.getAttribute('data-copy') || '';
+      const label = button.getAttribute('data-label') || 'Data';
+      copyText(value, label);
+    }
+
+    function copyText(value, label) {
+      navigator.clipboard.writeText(String(value || ''))
+        .then(function () {
+          showToast(label + ' berhasil disalin.', 'success', 'Tersalin');
+        })
+        .catch(function () {
+          showToast('Gagal menyalin ' + label + '.', 'error', 'Gagal');
+        });
+    }
+
+    async function copyOnlyEmployeePhoto() {
+      if (!selectedPhotoDataUrl) {
+        showToast('Foto belum tersedia.', 'error', 'Gagal');
+        return;
+      }
+
+      try {
+        const blob = dataUrlToBlob(selectedPhotoDataUrl);
+
+        if (navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([
+            new ClipboardItem({ [blob.type]: blob })
+          ]);
+
+          showToast('Foto karyawan berhasil disalin.', 'success', 'Berhasil');
+        } else {
+          const link = document.createElement('a');
+          link.href = selectedPhotoDataUrl;
+          link.download = 'foto-karyawan.png';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          showToast('Browser tidak mendukung copy foto. File didownload otomatis.', 'success', 'Downloaded');
+        }
+      } catch (error) {
+        showToast('Gagal copy foto.', 'error', 'Gagal');
+      }
+    }
+
+    function dataUrlToBlob(dataUrl) {
+      const arr = dataUrl.split(',');
+      const mime = arr[0].match(/:(.*?);/)[1];
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+
+      return new Blob([u8arr], { type: mime });
+    }
+
+    function printProfile() {
+      window.print();
+    }
+
+    function closeProfile() {
+      document.getElementById('profileOverlay').classList.remove('active');
+      selectedPhotoFileId = '';
+      selectedPhotoDataUrl = '';
+      currentProfileRow = null;
+
+      if (
+        !document.getElementById('settingsOverlay').classList.contains('active') &&
+        !document.getElementById('birthdayOverlay').classList.contains('active')
+      ) {
+        document.body.classList.remove('lock-scroll');
+      }
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('departmentFilter').value = '';
+      document.getElementById('branchFilter').value = '';
+      document.getElementById('statusFilter').value = '';
+      applySearch();
+      showToast('Filter pencarian dibersihkan.', 'success', 'Reset');
+    }
+
+    function downloadExcel() {
+      if (!filteredRows.length) {
+        showToast('Tidak ada data untuk didownload.', 'error', 'Data kosong');
+        return;
+      }
+
+      if (typeof XLSX === 'undefined') {
+        showToast('Library Excel belum berhasil dimuat. Periksa koneksi internet.', 'error', 'Gagal');
+        return;
+      }
+
+      const data = [
+        allHeaders,
+        ...filteredRows.map(row => allHeaders.map(header => row[header] || ''))
+      ];
+
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+      worksheet['!cols'] = allHeaders.map(function (header) {
+        const maxLength = Math.max(
+          String(header).length,
+          ...filteredRows.slice(0, 200).map(row => String(row[header] || '').length)
+        );
+
+        return {
+          wch: Math.min(Math.max(maxLength + 2, 12), 35)
+        };
+      });
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Karyawan');
+
+      const dateText = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(workbook, `Data_Karyawan_${dateText}.xlsx`);
+
+      showToast('File Excel berhasil dibuat.', 'success', 'Download');
+    }
+
+    function openBirthdayMenu() {
+      buildBirthdayRows();
+      buildBirthdayFilters();
+      applyBirthdayFilter();
+
+      document.getElementById('birthdayOverlay').classList.add('active');
+      document.body.classList.add('lock-scroll');
+    }
+
+    function closeBirthdayMenu() {
+      document.getElementById('birthdayOverlay').classList.remove('active');
+
+      if (
+        !document.getElementById('profileOverlay').classList.contains('active') &&
+        !document.getElementById('settingsOverlay').classList.contains('active')
+      ) {
+        document.body.classList.remove('lock-scroll');
+      }
+    }
+
+    function birthdayOverlayClick(event) {
+      if (event.target.id === 'birthdayOverlay') {
+        closeBirthdayMenu();
+      }
+    }
+
+    function buildBirthdayRows() {
+      birthdayRows = [];
+
+      if (!filterHeaders.birthDate) return;
+
+      allRows.forEach(function (row, index) {
+        if (isResigned(row)) return;
+
+        const profile = row._profile || {};
+        const birthText = String(row[filterHeaders.birthDate] || '').trim();
+        const date = parseClientDate(birthText);
+
+        if (!date) return;
+
+        const birthdayThisWeek = getBirthdayDateInCurrentWeek(date);
+
+        if (!birthdayThisWeek) return;
+
+        birthdayRows.push({
+          index: index,
+          noId: profile.id || '-',
+          nama: profile.name || '-',
+          section: getSectionValue(row),
+          tglLahir: birthText || '-',
+          usia: profile.age || '-',
+          masaKerja: profile.workPeriod || '-',
+          status: getDisplayStatus(row),
+          cabang: profile.branch || '-',
+          birthdayDate: birthdayThisWeek,
+          row: row
+        });
+      });
+
+      birthdayRows.sort((a, b) => a.birthdayDate - b.birthdayDate);
+    }
+
+    function buildBirthdayFilters() {
+      fillBirthdaySelect('birthdayDeptFilter', birthdayRows.map(item => item.section), 'Semua Section');
+      fillBirthdaySelect('birthdayBranchFilter', birthdayRows.map(item => item.cabang), 'Semua Cabang');
+      fillBirthdaySelect('birthdayStatusFilter', birthdayRows.map(item => item.status), 'Semua Status');
+    }
+
+    function fillBirthdaySelect(id, values, defaultLabel) {
+      const select = document.getElementById(id);
+      const currentValue = select.value;
+
+      select.innerHTML = `<option value="">${defaultLabel}</option>`;
+
+      [...new Set(values.filter(value => value && value !== '-'))]
+        .sort((a, b) => a.localeCompare(b))
+        .forEach(function (value) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = value;
+          select.appendChild(option);
+        });
+
+      select.value = currentValue;
+    }
+
+    function applyBirthdayFilter() {
+      const keyword = normalizeText(document.getElementById('birthdaySearchInput').value);
+      const section = document.getElementById('birthdayDeptFilter').value;
+      const cabang = document.getElementById('birthdayBranchFilter').value;
+      const status = document.getElementById('birthdayStatusFilter').value;
+
+      filteredBirthdayRows = birthdayRows.filter(function (item) {
+        const rowText = normalizeText([
+          item.noId,
+          item.nama,
+          item.section,
+          item.tglLahir,
+          item.usia,
+          item.masaKerja,
+          item.status,
+          item.cabang
+        ].join(' '));
+
+        const matchKeyword = !keyword || rowText.includes(keyword);
+        const matchSection = !section || item.section === section;
+        const matchCabang = !cabang || item.cabang === cabang;
+        const matchStatus = !status || item.status === status;
+
+        return matchKeyword && matchSection && matchCabang && matchStatus;
+      });
+
+      renderBirthdayTable();
+    }
+
+    function renderBirthdayTable() {
+      const container = document.getElementById('birthdayTableContainer');
+
+      if (!filterHeaders.birthDate) {
+        container.innerHTML = '<div class="empty">Kolom tanggal lahir tidak ditemukan.</div>';
+        return;
+      }
+
+      if (!filteredBirthdayRows.length) {
+        container.innerHTML = '<div class="empty">Tidak ada data ulang tahun sesuai filter.</div>';
+        return;
+      }
+
+      let html = '<table class="birthday-table">';
+      html += `
+        <thead>
+          <tr>
+            <th>No ID</th>
+            <th>Nama</th>
+            <th>Section</th>
+            <th>Tgl Lahir</th>
+            <th>Usia</th>
+            <th>Masa Kerja</th>
+            <th>Status</th>
+            <th>Cabang</th>
+          </tr>
+        </thead>
+        <tbody>
+      `;
+
+      filteredBirthdayRows.forEach(function (item) {
+        html += `
+          <tr onclick="openBirthdayProfile(${item.index})">
+            <td>${escapeHtml(item.noId)}</td>
+            <td>${escapeHtml(item.nama)}</td>
+            <td>${escapeHtml(item.section)}</td>
+            <td>${escapeHtml(item.tglLahir)}</td>
+            <td>${escapeHtml(item.usia)}</td>
+            <td>${escapeHtml(item.masaKerja)}</td>
+            <td>${renderStatusBadge(item.status, item.row)}</td>
+            <td>${escapeHtml(item.cabang)}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    function openBirthdayProfile(index) {
+      const row = allRows[index];
+      closeBirthdayMenu();
+      openProfileFromRow(row);
+    }
+
+    function exportBirthdayExcel() {
+      if (!filteredBirthdayRows.length) {
+        showToast('Tidak ada data ulang tahun untuk diexport.', 'error', 'Data kosong');
+        return;
+      }
+
+      if (typeof XLSX === 'undefined') {
+        showToast('Library Excel belum berhasil dimuat.', 'error', 'Gagal');
+        return;
+      }
+
+      const headers = ['No ID', 'Nama', 'Section', 'Tgl Lahir', 'Usia', 'Masa Kerja', 'Status', 'Cabang'];
+
+      const data = [
+        headers,
+        ...filteredBirthdayRows.map(item => [
+          item.noId,
+          item.nama,
+          item.section,
+          item.tglLahir,
+          item.usia,
+          item.masaKerja,
+          item.status,
+          item.cabang
+        ])
+      ];
+
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+      worksheet['!cols'] = headers.map(() => ({ wch: 20 }));
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Ulang Tahun Minggu Ini');
+
+      const dateText = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(workbook, `Ulang_Tahun_Minggu_Ini_${dateText}.xlsx`);
+
+      showToast('Data ulang tahun berhasil diexport.', 'success', 'Export Excel');
+    }
+
+    function getBirthdayDateInCurrentWeek(birthDate) {
+      const today = new Date();
+      const start = getStartOfWeek(today);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+
+      const years = [
+        start.getFullYear(),
+        end.getFullYear()
+      ];
+
+      for (const year of [...new Set(years)]) {
+        const birthday = new Date(year, birthDate.getMonth(), birthDate.getDate());
+        if (birthday >= start && birthday <= end) {
+          return birthday;
+        }
+      }
+
+      return null;
+    }
+
+    function getStartOfWeek(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+
+      d.setDate(d.getDate() + diff);
+      d.setHours(0, 0, 0, 0);
+
+      return d;
+    }
+
+    function parseClientDate(value) {
+      const text = String(value || '').trim();
+      if (!text || text === '-') return null;
+
+      const months = {
+        jan: 0, januari: 0, january: 0,
+        feb: 1, februari: 1, february: 1,
+        mar: 2, maret: 2, march: 2,
+        apr: 3, april: 3,
+        may: 4, mei: 4,
+        jun: 5, juni: 5, june: 5,
+        jul: 6, juli: 6, july: 6,
+        aug: 7, agustus: 7, august: 7,
+        sep: 8, sept: 8, september: 8,
+        oct: 9, okt: 9, oktober: 9, october: 9,
+        nov: 10, november: 10,
+        dec: 11, des: 11, desember: 11, december: 11
+      };
+
+      let match = text.match(/^(\d{1,2})[-\s\/.]([A-Za-z]+)[-\s\/.](\d{2,4})$/);
+      if (match) {
+        const day = Number(match[1]);
+        const month = months[match[2].toLowerCase()];
+        let year = Number(match[3]);
+        if (year < 100) year += 2000;
+
+        if (month != null) {
+          const date = new Date(year, month, day);
+          if (!isNaN(date.getTime())) return date;
+        }
+      }
+
+      match = text.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+      if (match) {
+        const day = Number(match[1]);
+        const month = Number(match[2]) - 1;
+        let year = Number(match[3]);
+        if (year < 100) year += 2000;
+
+        const date = new Date(year, month, day);
+        if (!isNaN(date.getTime())) return date;
+      }
+
+      match = text.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+      if (match) {
+        const year = Number(match[1]);
+        const month = Number(match[2]) - 1;
+        const day = Number(match[3]);
+
+        const date = new Date(year, month, day);
+        if (!isNaN(date.getTime())) return date;
+      }
+
+      const fallback = new Date(text);
+      if (!isNaN(fallback.getTime())) return fallback;
+
+      return null;
+    }
+
+    function showToast(message, type, title) {
+      const wrap = document.getElementById('toastWrap');
+      const toast = document.createElement('div');
+      const iconId = type === 'error' ? 'icon-alert' : 'icon-check';
+
+      toast.className = 'toast ' + (type || 'success');
+      toast.innerHTML = `
+        <div class="toast-icon">
+          <svg class="icon"><use href="#${iconId}"></use></svg>
+        </div>
+        <div>
+          <div class="toast-title">${escapeHtml(title || 'Info')}</div>
+          <div class="toast-message">${escapeHtml(message || '')}</div>
+        </div>
+      `;
+
+      wrap.appendChild(toast);
+
+      setTimeout(function () {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        toast.style.transition = '0.2s ease';
+
+        setTimeout(function () {
+          toast.remove();
+        }, 220);
+      }, 2600);
+    }
+
+    function normalizeText(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value).replace(/`/g, '&#096;');
+    }
+
+    function highlightText(value, keyword) {
+      const safeValue = escapeHtml(value);
+
+      if (!keyword) return safeValue;
+
+      const terms = keyword
+        .split(' ')
+        .filter(Boolean)
+        .map(escapeRegExp);
+
+      if (!terms.length) return safeValue;
+
+      const regex = new RegExp('(' + terms.join('|') + ')', 'gi');
+      return safeValue.replace(regex, '<mark>$1</mark>');
+    }
+
+    function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function getInitials(value) {
+      const text = String(value || '').trim();
+
+      if (!text) return 'HL';
+
+      const parts = text.split(/\s+/).filter(Boolean);
+
+      if (parts.length === 1) {
+        return parts[0].substring(0, 2).toUpperCase();
+      }
+
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+
+    function showError(message) {
+      const box = document.getElementById('errorBox');
+      box.style.display = 'block';
+      box.textContent = message;
+    }
+
+    function hideError() {
+      const box = document.getElementById('errorBox');
+      box.style.display = 'none';
+      box.textContent = '';
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeProfile();
+        closeSettings();
+        closeBirthdayMenu();
+      }
+    });
+  </script>
+</body>
+</html>
