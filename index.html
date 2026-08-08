@@ -3449,37 +3449,7 @@
 
       <section class="table-card">
         <div class="table-wrapper">
-          <div id="tableContainer" class="empty" style="padding:0;">
-            <div class="load-progress-card" role="status" aria-live="polite">
-              <div class="load-progress-head">
-                <div class="load-progress-top">
-                  <div class="load-progress-icon"></div>
-                  <div>
-                    <div class="load-progress-kicker">Sinkronisasi Data</div>
-                    <div class="load-progress-title">Memuat data karyawan</div>
-                    <div class="load-progress-note">Menyiapkan koneksi...</div>
-                  </div>
-                </div>
-                <div class="load-progress-percent-wrap">
-                  <div class="load-progress-percent">0%</div>
-                  <div class="load-progress-percent-label">Loading</div>
-                </div>
-              </div>
-              <div class="load-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <div class="load-progress-fill" style="width:0%"></div>
-              </div>
-              <div class="load-progress-meta">
-                <div class="load-progress-meta-right">Mohon tunggu sebentar</div>
-              </div>
-              <div class="load-progress-dashboard">
-                <div class="load-progress-skeleton" aria-hidden="true">
-                  <div class="load-skel-row"><div class="load-skel-cell"></div><div class="load-skel-cell"></div><div class="load-skel-cell"></div><div class="load-skel-cell"></div></div>
-                  <div class="load-skel-row"><div class="load-skel-cell"></div><div class="load-skel-cell"></div><div class="load-skel-cell"></div><div class="load-skel-cell"></div></div>
-                  <div class="load-skel-row"><div class="load-skel-cell"></div><div class="load-skel-cell"></div><div class="load-skel-cell"></div><div class="load-skel-cell"></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div id="tableContainer" class="empty" style="padding:0;"></div>
         </div>
       </section>
     </main>
@@ -4458,23 +4428,16 @@
       const preservedState = opt.preserveSearch ? getSearchState() : null;
 
       try {
-        if (!opt.silentLoading) {
-          updateLoadingProgress(opt.fromCache ? 100 : 62, opt.fromCache ? 'Menampilkan data terakhir...' : 'Data diterima, membaca header...');
-        }
+        // Tidak ada progress/loading overlay.
         allHeaders = Array.isArray(result && result.headers) ? result.headers : [];
         allRows = Array.isArray(result && result.rows) ? result.rows : [];
         filteredRows = allRows;
 
-        if (!opt.silentLoading) {
-          updateLoadingProgress(opt.fromCache ? 100 : 72, 'Mendeteksi kolom...');
-        }
+        // Pemrosesan header berjalan tanpa menampilkan loading.
         detectFilterHeaders();
         setSummaryText('filteredSummary', filteredRows.length);
 
-        if (!opt.silentLoading) {
-          updateLoadingProgress(100, opt.fromCache ? 'Data terakhir siap ditampilkan.' : 'Menampilkan data awal...');
-          stopLoadingProgress();
-        }
+        stopLoadingProgress();
 
         if (opt.preserveSearch) {
           try {
@@ -4506,27 +4469,8 @@
       }
     }
 
-    function startLoadingProgress() {
-      stopLoadingProgress();
-      loadProgressValue = 0;
-      renderLoadingProgress(0, 'Menyiapkan koneksi ke Google Sheet...');
-
-      // Progress tidak lagi dikunci di 94%; naik pelan sampai 98 sambil menunggu respons server.
-      loadProgressTimer = setInterval(function () {
-        if (loadProgressValue < 35) {
-          loadProgressValue += 8;
-        } else if (loadProgressValue < 70) {
-          loadProgressValue += 4;
-        } else if (loadProgressValue < 90) {
-          loadProgressValue += 2;
-        } else if (loadProgressValue < 98) {
-          loadProgressValue += 0.35;
-        }
-
-        if (loadProgressValue > 98) loadProgressValue = 98;
-        renderLoadingProgress(loadProgressValue, getLoadingProgressMessage(loadProgressValue));
-      }, 130);
-    }
+    // Loading progress dinonaktifkan. Data awal tampil langsung, sinkronisasi berjalan di background.
+    function startLoadingProgress() {}
 
     function stopLoadingProgress() {
       if (loadProgressTimer) {
@@ -4539,18 +4483,7 @@
       }
     }
 
-    function startSlowLoadNotice(requestId, cachedShown) {
-      if (loadSlowNoticeTimer) clearTimeout(loadSlowNoticeTimer);
-      loadSlowNoticeTimer = setTimeout(function () {
-        if (requestId !== activeLoadRequestId) return;
-
-        if (cachedShown) {
-          showToast('Data terbaru masih disinkronkan. Data yang tampil tetap bisa dipakai sementara.', 'success', 'Sinkronisasi');
-        } else {
-          updateLoadingProgress(98, 'Google Sheet masih merespons. Data akan langsung tampil begitu server selesai.');
-        }
-      }, LOAD_SLOW_NOTICE_MS);
-    }
+    function startSlowLoadNotice() {}
 
     function saveSheetDataCache(result) {
       try {
@@ -4621,78 +4554,10 @@
       if (exists) select.value = value;
     }
 
-    function updateLoadingProgress(percent, message) {
-      loadProgressValue = Math.max(loadProgressValue, Number(percent) || 0);
-      renderLoadingProgress(loadProgressValue, message || getLoadingProgressMessage(loadProgressValue));
-    }
-
-    function getLoadingProgressMessage(percent) {
-      if (percent < 25) return 'Menghubungkan ke server...';
-      if (percent < 58) return 'Mengambil data karyawan...';
-      if (percent < 82) return 'Menunggu data dari Google Sheet...';
-      if (percent < 96) return 'Menyusun tampilan data...';
-      if (percent < 100) return 'Menunggu respons akhir dari server...';
-      return 'Hampir selesai...';
-    }
-
-
-    function renderLoadingProgress(percent, message) {
-      const container = document.getElementById('tableContainer');
-      if (!container) return;
-
-      const value = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
-      const safeMessage = escapeHtml(message || 'Memuat data...');
-      const percentLabel = value >= 100 ? 'Selesai' : (value >= 98 ? 'Menunggu Server' : (value >= 90 ? 'Finalisasi' : 'Loading'));
-      const angle = (value * 3.6).toFixed(1) + 'deg';
-
-      container.className = 'loading';
-
-      const existingCard = container.querySelector('.load-progress-card.circular-mode');
-      if (existingCard) {
-        const circle = container.querySelector('#loadProgressCircle');
-        const percentText = container.querySelector('#loadProgressPercentText');
-        const note = container.querySelector('#loadProgressNote');
-        const label = container.querySelector('#loadProgressPercentLabel');
-        const fill = container.querySelector('#loadProgressFill');
-        const track = container.querySelector('#loadProgressTrack');
-        const meta = container.querySelector('#loadProgressMetaRight');
-
-        if (circle) {
-          circle.style.setProperty('--progress-deg', angle);
-          circle.style.setProperty('--angle', angle);
-        }
-        if (percentText) percentText.textContent = value + '%';
-        if (note) note.innerHTML = safeMessage;
-        if (label) label.textContent = percentLabel;
-        if (fill) fill.style.width = value + '%';
-        if (track) track.setAttribute('aria-valuenow', value);
-        if (meta) meta.textContent = value >= 100 ? 'Menampilkan data...' : 'Mohon tunggu sebentar';
-        return;
-      }
-
-      container.innerHTML = `
-        <div class="load-progress-card circular-mode" role="status" aria-live="polite">
-          <div class="load-progress-head">
-            <div class="load-progress-circle" id="loadProgressCircle" style="--progress-deg:${angle}; --angle:${angle};">
-              <span id="loadProgressPercentText">${value}%</span>
-              <i class="load-progress-orbit-dot" aria-hidden="true"></i>
-            </div>
-            <div class="load-progress-copy">
-              <div class="load-progress-kicker">Sinkronisasi Data</div>
-              <div class="load-progress-title">Memuat data karyawan</div>
-              <div class="load-progress-note" id="loadProgressNote">${safeMessage}</div>
-            </div>
-            <div class="load-progress-percent-label" id="loadProgressPercentLabel">${percentLabel}</div>
-          </div>
-          <div class="load-progress-track" id="loadProgressTrack" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}">
-            <div class="load-progress-fill" id="loadProgressFill" style="width:${value}%"></div>
-          </div>
-          <div class="load-progress-meta">
-            <div class="load-progress-meta-right" id="loadProgressMetaRight">${value >= 100 ? 'Menampilkan data...' : 'Mohon tunggu sebentar'}</div>
-          </div>
-        </div>
-      `;
-    }
+    // Compatibility no-op: seluruh animasi 0-100% sengaja dimatikan.
+    function updateLoadingProgress() {}
+    function getLoadingProgressMessage() { return ''; }
+    function renderLoadingProgress() {}
 
     function detectFilterHeaders() {
       filterHeaders.section = findHeaderByAliases(['section', 'seksi', 'departemen', 'department', 'divisi', 'division', 'bagian', 'dept']);
