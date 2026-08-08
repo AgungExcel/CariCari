@@ -4407,6 +4407,9 @@
               runWhenIdle(function(){ try { updateHeaderStats(); } catch (e) {} });
               runWhenIdle(function(){ try { prepareRowsForFastSearch(0,0,true); } catch (e) {} });
             }
+
+            // Sinkronisasi selesai 100%: tampilkan notifikasi kecil lalu hilang otomatis.
+            showToast('Data sudah sinkron 100%.', 'success', 'Sinkronisasi selesai');
           })
           .withFailureHandler(function () {
             // Sinkronisasi background gagal tidak mengganggu data yang sudah tampil.
@@ -4427,6 +4430,9 @@
             runWhenIdle(function(){ try { buildFilters(); } catch (e) {} });
             runWhenIdle(function(){ try { updateHeaderStats(); } catch (e) {} });
             runWhenIdle(function(){ try { prepareRowsForFastSearch(0,0,true); } catch (e) {} });
+
+            // Cache sudah tampil; setelah versi terbaru selesai disinkronkan, beri notifikasi singkat.
+            showToast('Data sudah sinkron 100%.', 'success', 'Sinkronisasi selesai');
           })
           .withFailureHandler(function () {})
           .getSheetData();
