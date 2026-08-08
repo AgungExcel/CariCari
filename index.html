@@ -3449,7 +3449,7 @@
 
       <section class="table-card">
         <div class="table-wrapper">
-          <div id="tableContainer" class="loading">
+          <div id="tableContainer" class="empty" style="padding:0;">
             <div class="load-progress-card" role="status" aria-live="polite">
               <div class="load-progress-head">
                 <div class="load-progress-top">
@@ -4003,6 +4003,7 @@
         'saveAppSettings',
         'resetAppSettings',
         'getSheetData',
+        'getSheetDataInitial',
         'rebuildPhotoIndexManual',
         'getEmployeePhotoDataById'
       ].forEach(function (methodName) {
@@ -4370,43 +4371,80 @@
     function reloadData(options) {
       hideError();
       const opt = options || {};
-      const cachedShown = !opt.forceFresh && showCachedSheetData();
       const requestId = ++activeLoadRequestId;
+      const cachedShown = !opt.forceFresh && showCachedSheetData();
 
-      if (!cachedShown) {
-        startLoadingProgress();
-      } else {
+      // Cache langsung tampil. Refresh terbaru berjalan diam-diam.
+      if (cachedShown) stopLoadingProgress();
+
+      const showInitialAndSync = function (result) {
+        if (requestId !== activeLoadRequestId) return;
+
         stopLoadingProgress();
-        showToast('Data terakhir langsung ditampilkan. Sinkronisasi terbaru berjalan di background.', 'success', 'Mode cepat');
+
+        processLoadedData(result, {
+          fromCache: false,
+          preserveSearch: cachedShown,
+          silentToast: true,
+          silentLoading: true
+        });
+
+        // Setelah 100 data pertama tampil, sinkronkan seluruh data di background.
+        // Tidak ada progress/loading yang ditampilkan.
+        google.script.run
+          .withSuccessHandler(function (fullResult) {
+            if (requestId !== activeLoadRequestId) return;
+
+            saveSheetDataCache(fullResult);
+
+            allHeaders = Array.isArray(fullResult && fullResult.headers) ? fullResult.headers : allHeaders;
+            allRows = Array.isArray(fullResult && fullResult.rows) ? fullResult.rows : allRows;
+
+            if (!cachedShown) {
+              filteredRows = allRows;
+              setSummaryText('filteredSummary', filteredRows.length);
+              runWhenIdle(function(){ try { buildFilters(); } catch (e) {} });
+              runWhenIdle(function(){ try { updateHeaderStats(); } catch (e) {} });
+              runWhenIdle(function(){ try { prepareRowsForFastSearch(0,0,true); } catch (e) {} });
+            }
+          })
+          .withFailureHandler(function () {
+            // Sinkronisasi background gagal tidak mengganggu data yang sudah tampil.
+          })
+          .getSheetData();
+      };
+
+      if (cachedShown) {
+        // Cache sudah tampil; server cukup mengambil versi terbaru di background.
+        google.script.run
+          .withSuccessHandler(function (fullResult) {
+            if (requestId !== activeLoadRequestId) return;
+            saveSheetDataCache(fullResult);
+            allHeaders = Array.isArray(fullResult && fullResult.headers) ? fullResult.headers : allHeaders;
+            allRows = Array.isArray(fullResult && fullResult.rows) ? fullResult.rows : allRows;
+            filteredRows = allRows;
+            setSummaryText('filteredSummary', filteredRows.length);
+            runWhenIdle(function(){ try { buildFilters(); } catch (e) {} });
+            runWhenIdle(function(){ try { updateHeaderStats(); } catch (e) {} });
+            runWhenIdle(function(){ try { prepareRowsForFastSearch(0,0,true); } catch (e) {} });
+          })
+          .withFailureHandler(function () {})
+          .getSheetData();
+        return;
       }
 
-      startSlowLoadNotice(requestId, cachedShown);
-
+      // First paint: hanya 100 data.
       google.script.run
-        .withSuccessHandler(function (result) {
-          if (requestId !== activeLoadRequestId) return;
-          stopLoadingProgress();
-          saveSheetDataCache(result);
-          processLoadedData(result, {
-            fromCache: false,
-            preserveSearch: cachedShown,
-            silentToast: cachedShown
-          });
-        })
+        .withSuccessHandler(showInitialAndSync)
         .withFailureHandler(function (error) {
           if (requestId !== activeLoadRequestId) return;
           stopLoadingProgress();
-
-          if (cachedShown) {
-            showToast('Sinkronisasi terbaru gagal, tetapi data terakhir tetap ditampilkan.', 'error', 'Mode cache');
-            return;
-          }
-
           showError(error && error.message ? error.message : String(error));
-          document.getElementById('tableContainer').className = 'empty';
-          document.getElementById('tableContainer').innerHTML = 'Gagal memuat data.';
+          const container = document.getElementById('tableContainer');
+          container.className = 'empty';
+          container.innerHTML = 'Gagal memuat data.';
         })
-        .getSheetData();
+        .getSheetDataInitial();
     }
 
     async function processLoadedData(result, options) {
@@ -4414,17 +4452,23 @@
       const preservedState = opt.preserveSearch ? getSearchState() : null;
 
       try {
-        updateLoadingProgress(opt.fromCache ? 100 : 62, opt.fromCache ? 'Menampilkan data terakhir...' : 'Data diterima, membaca header...');
+        if (!opt.silentLoading) {
+          updateLoadingProgress(opt.fromCache ? 100 : 62, opt.fromCache ? 'Menampilkan data terakhir...' : 'Data diterima, membaca header...');
+        }
         allHeaders = Array.isArray(result && result.headers) ? result.headers : [];
         allRows = Array.isArray(result && result.rows) ? result.rows : [];
         filteredRows = allRows;
 
-        updateLoadingProgress(opt.fromCache ? 100 : 72, 'Mendeteksi kolom...');
+        if (!opt.silentLoading) {
+          updateLoadingProgress(opt.fromCache ? 100 : 72, 'Mendeteksi kolom...');
+        }
         detectFilterHeaders();
         setSummaryText('filteredSummary', filteredRows.length);
 
-        updateLoadingProgress(100, opt.fromCache ? 'Data terakhir siap ditampilkan.' : 'Menampilkan data awal...');
-        stopLoadingProgress();
+        if (!opt.silentLoading) {
+          updateLoadingProgress(100, opt.fromCache ? 'Data terakhir siap ditampilkan.' : 'Menampilkan data awal...');
+          stopLoadingProgress();
+        }
 
         if (opt.preserveSearch) {
           try {
@@ -4532,7 +4576,7 @@
     function showCachedSheetData() {
       const cached = readSheetDataCache();
       if (!cached) return false;
-      processLoadedData({ headers: cached.headers, rows: cached.rows }, { fromCache: true, silentToast: true });
+      processLoadedData({ headers: cached.headers, rows: cached.rows }, { fromCache: true, silentToast: true, silentLoading: true });
       return true;
     }
 
