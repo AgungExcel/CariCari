@@ -4005,6 +4005,7 @@
     function readPersistentPhotoCache(key){try{const raw=localStorage.getItem(PHOTO_META_STORAGE_PREFIX+key);if(!raw)return null;const item=JSON.parse(raw);if(!item||Date.now()-Number(item.savedAt||0)>PHOTO_META_STORAGE_TTL_MS){localStorage.removeItem(PHOTO_META_STORAGE_PREFIX+key);return null;}return item.result||null;}catch(e){return null;}}
     function savePersistentPhotoCache(key,result){try{if(key&&result&&result.found&&result.imageUrl)localStorage.setItem(PHOTO_META_STORAGE_PREFIX+key,JSON.stringify({savedAt:Date.now(),result:result}));}catch(e){}}
     function fetchEmployeePhotoDataCached(key){const clean=String(key||'').trim();if(!clean||clean==='-')return Promise.resolve({found:false});if(photoCache[clean])return Promise.resolve(photoCache[clean]);const persisted=readPersistentPhotoCache(clean);if(persisted){setPhotoCache(clean,persisted);return Promise.resolve(persisted);}if(photoPendingRequests[clean])return photoPendingRequests[clean];photoPendingRequests[clean]=new Promise(resolve=>{google.script.run.withSuccessHandler(result=>{const safe=result&&result.found&&result.fileId?{found:true,fileId:result.fileId||'',imageUrl:result.imageUrl||'',dataUrl:result.dataUrl||''}:{found:false};setPhotoCache(clean,safe);savePersistentPhotoCache(clean,safe);resolve(safe);}).withFailureHandler(()=>{const safe={found:false};setPhotoCache(clean,safe);resolve(safe);}).getEmployeePhotoDataById(clean);}).finally(()=>{delete photoPendingRequests[clean]});return photoPendingRequests[clean];}
+    function getCachedEmployeePhoto(key){const clean=String(key||'').trim();if(!clean||clean==='-')return null;if(photoCache[clean])return photoCache[clean];const persisted=readPersistentPhotoCache(clean);if(persisted){setPhotoCache(clean,persisted);return persisted;}return null;}
     function clearClientPhotoCache(){try{Object.keys(photoCache||{}).forEach(key=>delete photoCache[key]);Object.keys(photoPendingRequests||{}).forEach(key=>delete photoPendingRequests[key]);Object.keys(localStorage).filter(k=>k.indexOf(PHOTO_META_STORAGE_PREFIX)===0).forEach(k=>localStorage.removeItem(k));}catch(err){}}
 
 
@@ -4794,9 +4795,18 @@
       const initial = getInitials(profile.name || profile.id || 'HL');
       showProfileInitial(initial); selectedPhotoDataUrl=''; selectedPhotoFileId=''; if(copyPhotoBtn) copyPhotoBtn.disabled=true;
       const profileId = String(profile.id || '').trim(); if(!profileId || profileId==='-') return;
-      if(photoCache[profileId]) { applyProfilePhotoResult(profileId, photoCache[profileId], initial); return; }
-      // Tanpa progress animation dan tanpa delay buatan.
-      fetchEmployeePhotoDataCached(profileId).then(function(safeResult){applyProfilePhotoResult(profileId, safeResult, initial);}).catch(function(){showProfileInitial(initial); if(copyPhotoBtn) copyPhotoBtn.disabled=true;});
+      const cached = getCachedEmployeePhoto(profileId);
+      if(cached) { applyProfilePhotoResult(profileId, cached, initial); return; }
+      const progress = createPhotoProgress(box, 'Mencari foto...');
+      progress.set(8);
+      fetchEmployeePhotoDataCached(profileId).then(function(safeResult){
+        progress.set(92);
+        applyProfilePhotoResult(profileId, safeResult, initial, progress);
+      }).catch(function(){
+        progress.fail();
+        setTimeout(function(){showProfileInitial(initial);}, 500);
+        if(copyPhotoBtn) copyPhotoBtn.disabled=true;
+      });
     }
 
     function setPhotoCache(key, result) {
@@ -4806,7 +4816,7 @@
       photoCache[key] = result || { found: false };
     }
 
-    function applyProfilePhotoResult(profileId, result, initial) {
+    function applyProfilePhotoResult(profileId, result, initial, progress) {
       const activeProfile = currentProfileRow && currentProfileRow._profile ? currentProfileRow._profile : {};
       const activeId = String(activeProfile.id || '').trim();
       const copyPhotoBtn = document.getElementById('copyPhotoBtn');
@@ -4818,34 +4828,40 @@
         selectedPhotoDataUrl = result.dataUrl || '';
         copyPhotoBtn.disabled = !selectedPhotoFileId;
 
-        setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, result.fileId || '');
+        setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, result.fileId || '', progress);
       } else {
-        showProfileInitial(initial);
+        if(progress) progress.fail();
+        setTimeout(function(){showProfileInitial(initial);}, progress ? 500 : 0);
         copyPhotoBtn.disabled = true;
       }
     }
 
     function fetchPhotoDataUrlByFileId(fileId){return new Promise(resolve=>{if(!fileId)return resolve('');google.script.run.withSuccessHandler(r=>resolve(r&&r.found&&r.dataUrl?r.dataUrl:'')).withFailureHandler(()=>resolve('')).getEmployeePhotoDataByFileId(fileId);});}
 
-    function setProfilePhotoImage(imageUrl, initial, fileId) {
+    function setProfilePhotoImage(imageUrl, initial, fileId, progress) {
       const box = document.getElementById('profilePhotoBox');
       const img = new Image();
       let fallbackTried = false;
       img.className = 'profile-photo';
       img.alt = 'Foto Profil';
       img.decoding = 'async';
-      img.onload = function () { box.innerHTML = ''; box.appendChild(img); };
+      img.onload = function () {
+        if(progress) progress.done();
+        box.innerHTML = ''; box.appendChild(img);
+      };
       img.onerror = function () {
         if (!fallbackTried && fileId && String(imageUrl||'').indexOf('data:') !== 0) {
           fallbackTried = true;
+          if(progress) progress.set(96);
           fetchPhotoDataUrlByFileId(fileId).then(function(dataUrl){
-            if (!dataUrl) { showProfileInitial(initial); return; }
+            if (!dataUrl) { if(progress) progress.fail(); setTimeout(function(){showProfileInitial(initial);}, progress ? 500 : 0); return; }
             selectedPhotoDataUrl = dataUrl;
             img.src = dataUrl;
           });
           return;
         }
-        showProfileInitial(initial);
+        if(progress) progress.fail();
+        setTimeout(function(){showProfileInitial(initial);}, progress ? 500 : 0);
       };
       img.src = imageUrl;
     }
@@ -6462,8 +6478,20 @@
 
     function loadSelectedIdCardPhoto(info) {
       const key = String(info.photoKey || '').trim(); if(!key || key==='-') return;
-      if(photoCache[key]) { applySelectedIdCardPhoto(info, photoCache[key]); return; }
-      fetchEmployeePhotoDataCached(key).then(function(safeResult){applySelectedIdCardPhoto(info, safeResult);}).catch(function(){});
+      const cached = getCachedEmployeePhoto(key);
+      if(cached) { applySelectedIdCardPhoto(info, cached); return; }
+      const stage = document.getElementById('idCardPreviewStage');
+      const photoBox = stage ? stage.querySelector('.idcard-photo') : null;
+      const progress = createPhotoProgress(photoBox, 'Mencari foto...');
+      progress.set(8);
+      fetchEmployeePhotoDataCached(key).then(function(safeResult){
+        progress.set(92);
+        if(!safeResult || !safeResult.found || !(safeResult.imageUrl || safeResult.dataUrl)){progress.fail();return;}
+        const probe = new Image();
+        probe.onload=function(){progress.done();applySelectedIdCardPhoto(info,safeResult);};
+        probe.onerror=function(){progress.fail();};
+        probe.src=safeResult.imageUrl || safeResult.dataUrl;
+      }).catch(function(){progress.fail();});
     }
 
     function applySelectedIdCardPhoto(info, result) {
