@@ -3285,7 +3285,7 @@
     flex-direction: row !important;
     align-items: center !important;
     justify-content: flex-start !important;
-    gap: 6px !important;
+    gap: 5px !important;
     flex: 0 0 auto !important;
     width: auto !important;
     min-width: max-content !important;
@@ -3302,15 +3302,15 @@
   .profile-card.layout-cv .copy-mini-btn.modern-copy-btn,
   .profile-card.layout-cv .cv-copy-btn,
   .profile-card.layout-cv .cv-copy-btn.modern-copy-btn {
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px !important;
-    max-width: 24px !important;
-    flex: 0 0 24px !important;
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    max-width: 22px !important;
+    flex: 0 0 22px !important;
     padding: 0 !important;
-    margin: 0 !important;
-    border: 1px solid rgba(37, 99, 235, .45) !important;
-    border-radius: 9px !important;
+    margin: 0 0 0 2px !important;
+    border: 1px solid rgba(37, 99, 235, .42) !important;
+    border-radius: 7px !important;
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 55%, #1d4ed8 100%) !important;
     color: #ffffff !important;
     box-shadow: 0 8px 16px rgba(37, 99, 235, .24), inset 0 1px 0 rgba(255,255,255,.28) !important;
@@ -3327,8 +3327,8 @@
   .copy-mini-btn.cv-copy-btn svg,
   .profile-card.layout-cv .copy-mini-btn svg,
   .profile-card.layout-cv .cv-copy-btn svg {
-    width: 14px !important;
-    height: 14px !important;
+    width: 13px !important;
+    height: 13px !important;
     display: block !important;
     color: #ffffff !important;
     stroke: currentColor !important;
@@ -3483,7 +3483,7 @@
 
         <div class="profile-actions">
           <button class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">📋</button>
-          <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data: Nama, No ID, No KPJ, NIK">📝</button>
+          <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data: Nama, No.ID, No KPJ, NIK">📝</button>
           <button class="icon-btn amber" onclick="cycleProfileLayout()" title="Ganti layout profil">▦</button>
           <button class="icon-btn secondary" onclick="printProfile()" title="Print / Export PDF">🖨</button>
           <button class="icon-btn danger" onclick="closeProfile()" title="Tutup">×</button>
@@ -4960,8 +4960,8 @@
 
       html += `<div class="cv-section">`;
       html += `<h3 class="cv-section-title">Data Pribadi</h3>`;
-      html += rowLine('Nama', nama);
-      html += rowLine('No ID', noId);
+      html += rowLine('Nama', nama, '', true);
+      html += rowLine('No ID', noId, '', true);
       html += rowLine('Section', section);
       html += rowLine('Departemen', departemen);
       html += rowLine('Posisi', posisi);
@@ -4972,7 +4972,7 @@
       html += rowLine('Usia', profile.age || '-');
       html += rowLine('Masa Kerja', profile.workPeriod || '-');
       html += rowLine('Gaji Pokok', gajiPokok, '', true);
-      html += rowLine('Handphone', noHp);
+      html += rowLine('Handphone', noHp, '', true);
       html += rowLine('Status', status, 'cv-status');
       html += rowLine('Alamat', alamat, '', true);
       html += `</div>`;
@@ -4982,7 +4982,7 @@
       html += rowLine('NIK', noKtp, '', true);
       html += rowLine('No BPJS Kesehatan', bpjsKes, '', true);
       html += rowLine('No KPJ', kpj, '', true, true);
-      html += rowLine('Nomor Rekening', rekening);
+      html += rowLine('Nomor Rekening', rekening, '', true);
       html += `</div>`;
 
       const excluded = [
@@ -5025,10 +5025,14 @@
 
     function isCopyableHeader(header) {
       const h = normalizeText(header);
-      return h === 'nik' || h === 'no ktp' || h === 'nomor ktp' || h.includes('ktp') ||
+      return h === 'nama' || h === 'nama karyawan' || h === 'employee name' ||
+        h === 'no id' || h === 'nomor id' || h === 'id karyawan' || h === 'employee id' ||
+        h === 'nik' || h === 'no ktp' || h === 'nomor ktp' || h.includes('ktp') ||
         h.includes('bpjs kesehatan') || h.includes('no bpjs kesehatan') ||
         h.includes('bpjamsostek') || h.includes('no kpj') || h.includes('kpj') ||
         h === 'gaji pokok' || h.includes('basic salary') ||
+        h.includes('handphone') || h.includes('phone') || h === 'hp' || h.includes('no hp') ||
+        h.includes('rekening') || h.includes('nomor rekening') || h.includes('no rekening') ||
         isAddressHeader(header);
     }
 
@@ -5223,7 +5227,7 @@
 
       const copyValue = [
         'Nama : ' + nama,
-        'No ID : ' + noId,
+        'No.ID : ' + noId,
         'No KPJ : ' + noKpj,
         'NIK : ' + nik
       ].join('\n');
