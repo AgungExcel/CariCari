@@ -3371,7 +3371,7 @@
 
   .profile-card.layout-cv .cv-extra-grid {
     display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: minmax(0, 1fr) !important;
     column-gap: 18px !important;
     row-gap: 0 !important;
   }
@@ -3483,7 +3483,7 @@
 
         <div class="profile-actions">
           <button class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">📋</button>
-          <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data: Nama, No ID, No KPJ, NIK">📝</button>
+          <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data personal: Nama, No.ID, No Handphone, No Rekening, No KPJ, NIK">📝</button>
           <button class="icon-btn amber" onclick="cycleProfileLayout()" title="Ganti layout profil">▦</button>
           <button class="icon-btn secondary" onclick="printProfile()" title="Print / Export PDF">🖨</button>
           <button class="icon-btn danger" onclick="closeProfile()" title="Tutup">×</button>
@@ -4827,7 +4827,7 @@
       if (result && result.found && (result.imageUrl || result.dataUrl)) {
         selectedPhotoFileId = result.fileId || '';
         selectedPhotoDataUrl = result.dataUrl || '';
-        copyPhotoBtn.disabled = !selectedPhotoFileId;
+        copyPhotoBtn.disabled = !(selectedPhotoFileId || selectedPhotoDataUrl);
 
         setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, result.fileId || '', progress);
       } else {
@@ -4985,22 +4985,79 @@
       html += rowLine('Nomor Rekening', rekening, '', true);
       html += `</div>`;
 
+      // Ambil semua kolom yang benar-benar ada pada baris, bukan hanya header hasil sync awal.
+      // Ini mencegah Data Lainnya kehilangan kolom ketika daftar header dari cache belum lengkap.
       const excluded = [
-        'nama', 'nomor id', 'no id', 'id', 'section', 'departemen', 'department',
-        'cabang', 'unit', 'tempat lahir', 'tanggal lahir', 'tgl lahir',
-        'join', 'jenis kelamin', 'gender', 'kelamin', 'no hp', 'handphone', 'alamat', 'ktp', 'bpjs', 'kpj',
-        'rekening', 'usia', 'masa kerja', 'gaji pokok', 'basic salary', 'status', 'jabatan', 'posisi', 'position', 'job title', 'title'
+        'nama', 'nama karyawan', 'employee name',
+        'nomor id', 'no id', 'id karyawan', 'employee id',
+        'section', 'departemen', 'department', 'dept', 'bagian', 'divisi', 'division',
+        'cabang', 'unit', 'branch',
+        'posisi', 'jabatan', 'position', 'job title', 'title',
+        'jenis kelamin', 'gender', 'sex', 'jk', 'kelamin',
+        'tempat lahir', 'tanggal lahir', 'tgl lahir', 'birth place', 'dob',
+        'join date', 'joindate', 'tanggal masuk', 'tgl masuk',
+        'usia', 'umur', 'age', 'masa kerja', 'work period',
+        'gaji pokok', 'basic salary', 'salary',
+        'no hp', 'handphone', 'phone', 'nomor handphone', 'no handphone',
+        'alamat', 'address',
+        'no ktp', 'nik', 'nomor ktp', 'ktp',
+        'no bpjs kesehatan', 'bpjs kesehatan',
+        'no bpjamsostek', 'bpjamsostek', 'no kpj', 'kpj', 'nomor kpj',
+        'nomor rekening', 'no rekening', 'rekening',
+        'status', 'tanggal keluar', 'tgl keluar', 'alasan keluar'
       ];
 
-      const extraRows = allHeaders
-        .filter(header => {
-          const h = normalizeText(header);
-          if (excluded.some(x => h.includes(x))) return false;
-          const rawValue = row[header];
-          const cleanValue = rawValue == null || rawValue === '' ? '-' : String(rawValue).trim();
-          return cleanValue && cleanValue !== '-';
+      function isExcludedExtraHeader(header) {
+        // Field internal aplikasi (_profile, _searchText, _sectionValue, dll)
+        // jangan pernah ditampilkan sebagai Data Lainnya. Cek nama ASLI sebelum
+        // normalizeText(), karena normalizeText mengubah '_' menjadi spasi.
+        const rawHeader = String(header == null ? '' : header).trim();
+        const h = normalizeText(rawHeader);
+        // Jangan pernah menampilkan properti internal yang ditambahkan aplikasi
+        // ke object row. Properti-properti ini bukan kolom spreadsheet.
+        if (!rawHeader) return true;
+        if (/^_[a-z0-9]/i.test(rawHeader)) return true;
+        if (/^(profile|search text|section value|branch value|status value)$/i.test(h)) return true;
+        if (/^(profile|search text|section value|branch value|status value)\s+/i.test(h)) return true;
+        if (excluded.indexOf(h) !== -1) return true;
+        return excluded.some(function (x) {
+          return h === x || h.includes(x);
+        });
+      }
+
+      function hasDisplayableExtraValue(value) {
+        if (value == null) return false;
+        if (typeof value === 'object') return false;
+        const text = String(value).trim();
+        return text !== '' && text !== '[object Object]';
+      }
+
+      const extraHeaderSet = new Set();
+      const extraHeaders = [];
+
+      // Pertahankan urutan kolom spreadsheet terlebih dahulu.
+      allHeaders.forEach(function (header) {
+        if (!isExcludedExtraHeader(header) && Object.prototype.hasOwnProperty.call(row, header)) {
+          const value = row[header];
+          if (hasDisplayableExtraValue(value)) {
+            const key = String(header);
+            if (!extraHeaderSet.has(key)) {
+              extraHeaderSet.add(key);
+              extraHeaders.push(key);
+            }
+          }
+        }
+      });
+
+      // Jangan mengambil Object.keys(row) sebagai sumber tambahan.
+      // Object row juga berisi properti internal aplikasi seperti _profile,
+      // _searchText, _sectionValue, _branchValue, dan _statusValue.
+      // Semua kolom Data Lainnya harus berasal dari header spreadsheet (allHeaders).
+
+      const extraRows = extraHeaders
+        .map(function (header) {
+          return rowLine(header, row[header] == null ? '-' : row[header]);
         })
-        .map(header => rowLine(header, row[header] || '-'))
         .join('');
 
       if (extraRows) {
@@ -5124,58 +5181,97 @@
     }
 
     async function copyProfileCardImage() {
-      try { await ensureHtml2Canvas(); } catch (error) { showToast(error && error.message ? error.message : 'Library gambar belum berhasil dimuat.', 'error', 'Gagal'); return; }
+      try { await ensureHtml2Canvas(); } catch (error) {
+        showToast(error && error.message ? error.message : 'Library gambar belum berhasil dimuat.', 'error', 'Gagal');
+        return;
+      }
 
       const card = document.getElementById('profileCard');
-
-      if (!card) {
+      if (!card || !currentProfileRow) {
         showToast('Profil belum tersedia.', 'error', 'Gagal');
         return;
       }
 
-      if (typeof html2canvas === 'undefined') {
-        showToast('Library copy gambar belum termuat. Periksa koneksi internet.', 'error', 'Gagal');
-        return;
-      }
-
       try {
-        showToast('Sedang membuat gambar profil...', 'success', 'Memproses');
+        showToast('Menyiapkan gambar profil...', 'success', 'Memproses');
 
-        card.classList.add('capture-mode');
-        await new Promise(resolve => setTimeout(resolve, 180));
+        // Pastikan foto profil sudah berupa dataUrl sehingga html2canvas tidak terkena CORS dari Google Drive.
+        if (!selectedPhotoDataUrl && selectedPhotoFileId) {
+          const result = await new Promise((resolve, reject) => {
+            google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getEmployeePhotoDataByFileId(selectedPhotoFileId);
+          });
+          if (result && result.found && result.dataUrl) selectedPhotoDataUrl = result.dataUrl;
+        }
 
-        const canvas = await html2canvas(card, {
-          backgroundColor: '#ffffff',
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          logging: false
+        const captureWrap = document.createElement('div');
+        captureWrap.style.position = 'fixed';
+        captureWrap.style.left = '-100000px';
+        captureWrap.style.top = '0';
+        captureWrap.style.width = Math.max(card.scrollWidth, card.clientWidth) + 'px';
+        captureWrap.style.background = '#ffffff';
+        captureWrap.style.zIndex = '-1';
+        captureWrap.style.pointerEvents = 'none';
+
+        const clone = card.cloneNode(true);
+        clone.classList.add('capture-mode');
+        clone.style.width = getComputedStyle(card).width;
+        clone.style.setProperty('max-height', 'none', 'important');
+        clone.style.setProperty('height', 'auto', 'important');
+        clone.style.overflow = 'visible';
+        clone.style.boxShadow = 'none';
+        clone.style.position = 'relative';
+        clone.style.left = '0';
+        clone.style.top = '0';
+        captureWrap.appendChild(clone);
+        document.body.appendChild(captureWrap);
+
+        if (selectedPhotoDataUrl) {
+          clone.querySelectorAll('.profile-photo').forEach(function (img) {
+            img.crossOrigin = 'anonymous';
+            img.src = selectedPhotoDataUrl;
+          });
+        }
+
+        // Hilangkan tombol/interaksi dari hasil gambar, tetapi pertahankan seluruh data.
+        const cloneBody = clone.querySelector('.profile-body');
+        if (cloneBody) {
+          cloneBody.style.setProperty('overflow', 'visible', 'important');
+          cloneBody.style.setProperty('height', 'auto', 'important');
+          cloneBody.style.setProperty('max-height', 'none', 'important');
+        }
+        clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn').forEach(function (el) {
+          el.style.display = 'none';
         });
 
-        card.classList.remove('capture-mode');
+        await new Promise(function (resolve) { setTimeout(resolve, 60); });
 
-        canvas.toBlob(async function (blob) {
-          if (!blob) {
-            showToast('Gagal membuat gambar profil.', 'error', 'Gagal');
-            return;
-          }
+        const canvas = await html2canvas(clone, {
+          backgroundColor: '#ffffff',
+          scale: Math.min(2, window.devicePixelRatio || 1.5),
+          useCORS: true,
+          allowTaint: false,
+          logging: false,
+          imageTimeout: 10000,
+          removeContainer: true
+        });
 
-          try {
-            if (navigator.clipboard && window.ClipboardItem) {
-              await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-              showToast('Gambar profil berhasil disalin.', 'success', 'Berhasil');
-            } else {
-              downloadProfileImageFromCanvas(canvas);
-              showToast('Browser tidak mendukung copy gambar. File PNG didownload otomatis.', 'success', 'Downloaded');
-            }
-          } catch (error) {
-            downloadProfileImageFromCanvas(canvas);
-            showToast('Copy clipboard gagal. File PNG didownload otomatis.', 'success', 'Downloaded');
-          }
-        }, 'image/png');
+        captureWrap.remove();
+
+        const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
+        if (!blob) throw new Error('Gagal membuat PNG');
+
+        try {
+          await writeClipboardImage(blob);
+          showToast('Gambar profil berhasil disalin ke clipboard.', 'success', 'Berhasil');
+        } catch (clipboardError) {
+          console.error('copyProfileCardImage clipboard:', clipboardError);
+          showToast('Gambar profil gagal dicopy ke clipboard. Tidak ada file yang didownload.', 'error', 'Copy gambar gagal');
+        }
       } catch (error) {
-        card.classList.remove('capture-mode');
-        showToast('Gagal copy gambar profil.', 'error', 'Gagal');
+        const orphan = document.querySelector('body > div[style*="-100000px"]');
+        if (orphan) orphan.remove();
+        console.error('copyProfileCardImage:', error);
+        showToast('Gagal copy gambar profil: ' + (error && error.message ? error.message : 'proses capture gagal'), 'error', 'Gagal');
       }
     }
 
@@ -5192,10 +5288,24 @@
     }
 
     function copyFromButton(event, button) {
-      event.stopPropagation();
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (!button) return;
       const value = button.getAttribute('data-copy') || '';
       const label = button.getAttribute('data-label') || 'Data';
       copyText(value, label);
+    }
+
+    function getQuickCopyValue(aliases, fallback) {
+      const row = currentProfileRow || {};
+      const profile = row._profile || {};
+      const header = findHeaderByAliases(aliases || []);
+      const raw = header ? row[header] : '';
+      const clean = raw == null ? '' : String(raw).trim();
+      if (clean) return clean;
+      return fallback || '-';
     }
 
     function copyProfileQuickData(event) {
@@ -5206,28 +5316,22 @@
 
       const row = currentProfileRow || {};
       const profile = row._profile || {};
-
-      function findQuickValue(aliases, fallback) {
-        const header = findHeaderByAliases(aliases);
-        const value = header ? row[header] : '';
-        const clean = value == null || String(value).trim() === '' ? '' : String(value).trim();
-        return clean || fallback || '-';
-      }
-
       const nama = profile.name && profile.name !== '-'
         ? String(profile.name).trim()
-        : findQuickValue(['nama', 'nama karyawan', 'employee name'], '-');
-
+        : getQuickCopyValue(['nama', 'nama karyawan', 'employee name']);
       const noId = profile.id && profile.id !== '-'
         ? String(profile.id).trim()
-        : findQuickValue(['nomor id', 'no id', 'id karyawan', 'employee id'], '-');
-
-      const noKpj = findQuickValue(['no bpjamsostek', 'bpjamsostek', 'no kpj', 'nomor kpj', 'kpj'], '-');
-      const nik = findQuickValue(['no ktp', 'nik', 'nomor ktp'], '-');
+        : getQuickCopyValue(['nomor id', 'no id', 'id karyawan', 'employee id']);
+      const noHp = getQuickCopyValue(['no hp', 'handphone', 'phone', 'mobile', 'no handphone']);
+      const noRekening = getQuickCopyValue(['nomor rekening', 'no rekening', 'rekening', 'bank account']);
+      const noKpj = getQuickCopyValue(['no bpjamsostek', 'bpjamsostek', 'no kpj', 'nomor kpj', 'kpj']);
+      const nik = getQuickCopyValue(['no ktp', 'nik', 'nomor ktp']);
 
       const copyValue = [
         'Nama : ' + nama,
-        'No ID : ' + noId,
+        'No.ID : ' + noId,
+        'No Handphone : ' + noHp,
+        'No Rekening : ' + noRekening,
         'No KPJ : ' + noKpj,
         'NIK : ' + nik
       ].join('\n');
@@ -5235,29 +5339,105 @@
       copyText(copyValue, 'Data personal');
     }
 
-    function copyText(value, label) {
-      navigator.clipboard.writeText(String(value || ''))
-        .then(() => showToast(label + ' berhasil disalin.', 'success', 'Tersalin'))
-        .catch(() => showToast('Gagal menyalin ' + label + '.', 'error', 'Gagal'));
+    async function writeClipboardTextFallback(value) {
+      const text = String(value == null ? '' : value);
+      if (!text) throw new Error('Data kosong');
+
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function' && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-10000px';
+      textarea.style.top = '0';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+      textarea.remove();
+      if (!copied) throw new Error('Clipboard tidak tersedia');
+    }
+
+    async function copyText(value, label) {
+      const text = String(value == null ? '' : value);
+      if (!text.trim()) {
+        showToast((label || 'Data') + ' kosong.', 'error', 'Data kosong');
+        return false;
+      }
+      try {
+        await writeClipboardTextFallback(text);
+        showToast((label || 'Data') + ' berhasil disalin.', 'success', 'Tersalin');
+        return true;
+      } catch (error) {
+        showToast('Gagal menyalin ' + (label || 'data') + '. Coba ulangi dari tombol Copy.', 'error', 'Gagal');
+        return false;
+      }
+    }
+
+    async function writeClipboardImage(blob) {
+      if (!blob) throw new Error('Gambar kosong');
+      if (!window.isSecureContext) throw new Error('Clipboard gambar hanya dapat digunakan pada HTTPS.');
+      if (!navigator.clipboard || typeof navigator.clipboard.write !== 'function') {
+        throw new Error('Browser tidak mendukung copy gambar ke clipboard.');
+      }
+      if (!window.ClipboardItem) throw new Error('ClipboardItem tidak didukung browser.');
+
+      // Gunakan Clipboard API asli dan jangan pernah fallback ke download.
+      const item = new ClipboardItem({ 'image/png': blob });
+      await navigator.clipboard.write([item]);
+      return true;
     }
 
     async function copyOnlyEmployeePhoto() {
       try {
+        const activeProfile = currentProfileRow && currentProfileRow._profile ? currentProfileRow._profile : {};
+        const profileId = String(activeProfile.id || '').trim();
+
+        // Selalu prioritaskan dataUrl yang sudah ada agar copy tidak perlu request ulang.
         if (!selectedPhotoDataUrl && selectedPhotoFileId) {
           showToast('Menyiapkan foto...', 'success', 'Foto');
-          const result = await new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getEmployeePhotoDataByFileId(selectedPhotoFileId));
+          const result = await new Promise((resolve, reject) => {
+            google.script.run
+              .withSuccessHandler(resolve)
+              .withFailureHandler(reject)
+              .getEmployeePhotoDataByFileId(selectedPhotoFileId);
+          });
           if (result && result.found && result.dataUrl) selectedPhotoDataUrl = result.dataUrl;
         }
-        if (!selectedPhotoDataUrl) { showToast('Foto belum tersedia.', 'error', 'Gagal'); return; }
-        const blob = dataUrlToBlob(selectedPhotoDataUrl);
-        if (navigator.clipboard && window.ClipboardItem) {
-          await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-          showToast('Foto berhasil disalin.', 'success', 'Berhasil');
-        } else {
-          const link = document.createElement('a'); link.href = selectedPhotoDataUrl; link.download = 'foto-karyawan'; document.body.appendChild(link); link.click(); link.remove();
-          showToast('Browser tidak mendukung copy gambar langsung.', 'success', 'Foto');
+
+        // Fallback terakhir: ambil berdasarkan No.ID jika fileId tidak tersedia.
+        if (!selectedPhotoDataUrl && profileId) {
+          const result = await fetchEmployeePhotoDataCached(profileId);
+          if (result && result.found && result.dataUrl) {
+            selectedPhotoFileId = result.fileId || selectedPhotoFileId;
+            selectedPhotoDataUrl = result.dataUrl;
+          }
         }
-      } catch (error) { showToast('Gagal menyalin foto.', 'error', 'Gagal'); }
+
+        if (!selectedPhotoDataUrl) {
+          showToast('Foto belum tersedia untuk dicopy.', 'error', 'Gagal');
+          return;
+        }
+
+        const blob = dataUrlToBlob(selectedPhotoDataUrl);
+        try {
+          await writeClipboardImage(blob);
+          showToast('Foto berhasil disalin ke clipboard.', 'success', 'Berhasil');
+        } catch (clipboardError) {
+          console.error('copyOnlyEmployeePhoto clipboard:', clipboardError);
+          showToast('Foto tidak bisa dicopy ke clipboard. Pastikan aplikasi dibuka melalui HTTPS dan izinkan akses clipboard browser.', 'error', 'Copy gambar gagal');
+        }
+      } catch (error) {
+        showToast('Gagal menyalin foto. Coba buka ulang profil lalu tekan Copy.', 'error', 'Gagal');
+      }
     }
 
     function dataUrlToBlob(dataUrl) {
@@ -7027,7 +7207,10 @@
 
   .profile-card.layout-cv .profile-body {
     padding: 0 36px 8px !important;
-    overflow: hidden !important;
+    overflow: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .profile-card.layout-cv .detail-grid {
