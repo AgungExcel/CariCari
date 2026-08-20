@@ -3482,7 +3482,7 @@
         </div>
 
         <div class="profile-actions">
-          <button class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">📋</button>
+          <button type="button" id="copyProfileCardBtn" class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">📋</button>
           <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data personal: Nama, No.ID, No Handphone, No Rekening, No KPJ, NIK">📝</button>
           <button class="icon-btn amber" onclick="cycleProfileLayout()" title="Ganti layout profil">▦</button>
           <button class="icon-btn secondary" onclick="printProfile()" title="Print / Export PDF">🖨</button>
@@ -3824,6 +3824,10 @@
     let selectedPhotoDataUrl = '';
     let uploadedLogoDataUrl = '';
     let currentProfileRow = null;
+    let preparedProfileCardBlob = null;
+    let preparedProfileCardKey = '';
+    let preparingProfileCardPromise = null;
+    let profileCardCopyBusy = false;
     let searchTimer = null;
     let confirmDialogResolve = null;
     let loadProgressTimer = null;
@@ -3869,6 +3873,7 @@
 
     const CARICARI_BACKEND_URL = 'https://script.google.com/macros/s/AKfycby_bGpxi9KOB4EZA3PD21ND8eLbTKE1-ljXidgXEqVhx4Lr4n7fW9yQFjm67FoDsikI8A/exec';
     const CARICARI_LOCAL_LOGO_URL = 'hoplun.png';
+    const EMBEDDED_PROFILE_LOGO_DATA_URL = 'data:image/png;base64,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';
     const DEFAULT_FAVICON_ICO = CARICARI_LOCAL_LOGO_URL;
     const DEFAULT_FAVICON_PNG = CARICARI_LOCAL_LOGO_URL;
 
@@ -4788,6 +4793,17 @@
 
       document.getElementById('profileOverlay').classList.add('active');
       document.body.classList.add('lock-scroll');
+
+      // Copy Profil disiapkan hanya saat dibutuhkan agar modal tidak loading lama.
+      preparedProfileCardBlob = null;
+      preparedProfileCardKey = '';
+      preparingProfileCardPromise = null;
+      const copyProfileBtn = document.getElementById('copyProfileCardBtn');
+      if (copyProfileBtn) {
+        copyProfileBtn.disabled = false;
+        copyProfileBtn.innerHTML = '📋';
+        copyProfileBtn.title = 'Copy gambar profil';
+      }
     }
 
     function renderProfilePhoto(profile) {
@@ -4827,7 +4843,6 @@
       if (result && result.found && (result.imageUrl || result.dataUrl)) {
         selectedPhotoFileId = result.fileId || '';
         selectedPhotoDataUrl = result.dataUrl || '';
-
         // Tombol "Copy foto saja" harus siap dengan dataUrl SEBELUM diklik.
         // Jika backend hanya mengembalikan fileId/imageUrl, ambil dataUrl di background
         // sehingga Clipboard API tetap dipanggil langsung dari klik tombol.
@@ -4845,6 +4860,7 @@
         }
 
         setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, result.fileId || '', progress);
+
       } else {
         if(progress) progress.fail();
         setTimeout(function(){showProfileInitial(initial);}, progress ? 500 : 0);
@@ -5195,129 +5211,464 @@
       return profile.section || profile.department || '-';
     }
 
+    async function captureProfileCardBlobRobust() {
+      const originalCard = document.getElementById('profileCard');
+      const originalOverlay = document.getElementById('profileOverlay');
+      if (!originalCard || !originalOverlay || !currentProfileRow) {
+        throw new Error('Profil belum tersedia');
+      }
+
+      await ensureHtml2Canvas();
+
+      // Jangan capture kartu asli. Clone SELURUH overlay agar semua selector CSS
+      // yang bergantung pada .profile-overlay tetap berlaku pada hasil gambar.
+      const wrap = document.createElement('div');
+      wrap.style.cssText = [
+        'position:fixed',
+        'left:-20000px',
+        'top:0',
+        'width:' + Math.max(1, Math.ceil(originalCard.getBoundingClientRect().width || 860)) + 'px',
+        'height:auto',
+        'padding:0',
+        'margin:0',
+        'background:#ffffff',
+        'z-index:2147483647',
+        'display:block',
+        'visibility:visible',
+        'opacity:1',
+        'pointer-events:none',
+        'overflow:visible'
+      ].join(';');
+
+      const overlayClone = originalOverlay.cloneNode(true);
+      overlayClone.removeAttribute('id');
+      overlayClone.style.cssText = [
+        'position:static !important',
+        'display:block !important',
+        'width:100% !important',
+        'height:auto !important',
+        'min-height:0 !important',
+        'padding:0 !important',
+        'margin:0 !important',
+        'background:#ffffff !important',
+        'overflow:visible !important',
+        'visibility:visible !important',
+        'opacity:1 !important'
+      ].join(';');
+
+      const clonedCard = overlayClone.querySelector('#profileCard');
+      if (!clonedCard) throw new Error('Kartu profil tidak ditemukan');
+      clonedCard.removeAttribute('id');
+      clonedCard.style.setProperty('position', 'relative', 'important');
+      clonedCard.style.setProperty('left', '0', 'important');
+      clonedCard.style.setProperty('top', '0', 'important');
+      clonedCard.style.setProperty('transform', 'none', 'important');
+      clonedCard.style.setProperty('margin', '0', 'important');
+      clonedCard.style.setProperty('max-height', 'none', 'important');
+      clonedCard.style.setProperty('height', 'auto', 'important');
+      clonedCard.style.setProperty('overflow', 'visible', 'important');
+      clonedCard.style.setProperty('box-shadow', 'none', 'important');
+
+      // Jangan ikutkan tombol aksi/copy ke gambar profil.
+      clonedCard.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn, .profile-bpjstk-actions, .bpjstk-view-btn, .cv-view-card-btn').forEach(function(el) {
+        el.style.setProperty('display', 'none', 'important');
+      });
+
+      const clonedBody = clonedCard.querySelector('.profile-body');
+      if (clonedBody) {
+        clonedBody.style.setProperty('overflow', 'visible', 'important');
+        clonedBody.style.setProperty('height', 'auto', 'important');
+        clonedBody.style.setProperty('max-height', 'none', 'important');
+      }
+
+      // Gunakan dataUrl foto yang sudah terbukti bisa dicopy oleh tombol
+      // "Copy Foto Saja". Ini menghilangkan ketergantungan CORS pada Drive.
+      if (selectedPhotoDataUrl) {
+        clonedCard.querySelectorAll('.profile-photo').forEach(function(img) {
+          img.removeAttribute('crossorigin');
+          img.src = selectedPhotoDataUrl;
+          img.style.setProperty('display', 'block', 'important');
+        });
+      }
+
+      // FIX LOGO: jangan biarkan logo perusahaan tetap menunjuk ke
+      // "hoplun.png"/URL eksternal pada clone. Inline menjadi data URL
+      // agar html2canvas pasti menangkap logonya saat hasil dipaste.
+      const clonedCvLogo = clonedCard.querySelector('#cvCompanyLogo') || clonedCard.querySelector('.cv-company-logo');
+      if (clonedCvLogo) {
+        const originalCvLogo = document.getElementById('cvCompanyLogo');
+        const sourceImg = (originalCvLogo && originalCvLogo.querySelector('img')) || clonedCvLogo.querySelector('img');
+
+        if (sourceImg && sourceImg.src) {
+          try {
+            let logoDataUrl = '';
+            if (String(sourceImg.src).indexOf('data:image/') === 0) {
+              logoDataUrl = sourceImg.src;
+            } else {
+              const response = await fetch(sourceImg.src, { cache: 'force-cache' });
+              if (response.ok) {
+                const blob = await response.blob();
+                logoDataUrl = await new Promise(function(resolve, reject) {
+                  const reader = new FileReader();
+                  reader.onloadend = function() { resolve(String(reader.result || '')); };
+                  reader.onerror = reject;
+                  reader.readAsDataURL(blob);
+                });
+              }
+            }
+
+            if (logoDataUrl) {
+              clonedCvLogo.innerHTML = '';
+              const logoImg = document.createElement('img');
+              logoImg.alt = 'Logo';
+              logoImg.src = logoDataUrl;
+              logoImg.style.width = '100%';
+              logoImg.style.height = '100%';
+              logoImg.style.objectFit = 'cover';
+              clonedCvLogo.appendChild(logoImg);
+              try { await logoImg.decode(); } catch (_) {}
+            }
+          } catch (logoError) {
+            console.warn('Logo profil gagal di-inline:', logoError);
+          }
+        }
+      }
+
+      // Semua gambar clone ditunggu selesai agar html2canvas tidak menangkap
+      // placeholder/blank image.
+      const clonedImages = Array.from(clonedCard.querySelectorAll('img'));
+      clonedImages.forEach(function(img) {
+        img.removeAttribute('loading');
+        img.removeAttribute('decoding');
+      });
+
+      wrap.appendChild(overlayClone);
+      document.body.appendChild(wrap);
+
+      try {
+        await new Promise(function(resolve) {
+          const images = Array.from(wrap.querySelectorAll('img'));
+          if (!images.length) return resolve();
+          let remaining = images.length;
+          let finished = false;
+          const done = function() {
+            remaining -= 1;
+            if (remaining <= 0 && !finished) {
+              finished = true;
+              resolve();
+            }
+          };
+          images.forEach(function(img) {
+            if (img.complete && (img.naturalWidth || img.src.indexOf('data:') === 0)) done();
+            else {
+              img.addEventListener('load', done, { once:true });
+              img.addEventListener('error', done, { once:true });
+            }
+          });
+          setTimeout(function(){ if (!finished) { finished = true; resolve(); } }, 4000);
+        });
+
+        if (document.fonts && document.fonts.ready) {
+          try { await document.fonts.ready; } catch (_) {}
+        }
+
+        const cardRect = clonedCard.getBoundingClientRect();
+        const width = Math.max(1, Math.ceil(cardRect.width || originalCard.getBoundingClientRect().width || 860));
+        const height = Math.max(1, Math.ceil(clonedCard.scrollHeight || cardRect.height || 600));
+        const scale = Math.min(2, Math.max(1.5, window.devicePixelRatio || 1.5));
+
+        const canvas = await html2canvas(clonedCard, {
+          backgroundColor: '#ffffff',
+          scale: scale,
+          useCORS: true,
+          allowTaint: false,
+          logging: false,
+          imageTimeout: 15000,
+          removeContainer: true,
+          width: width,
+          height: height,
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: Math.max(document.documentElement.clientWidth, width + 40),
+          windowHeight: Math.max(document.documentElement.clientHeight, height + 40)
+        });
+
+        return await new Promise(function(resolve, reject) {
+          canvas.toBlob(function(blob) {
+            if (blob && blob.size) resolve(blob);
+            else reject(new Error('Gagal membuat PNG profil'));
+          }, 'image/png');
+        });
+      } finally {
+        if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      }
+    }
+
+    async function prepareProfileCardImage(force) {
+      const profile = (currentProfileRow && currentProfileRow._profile) || {};
+      const key = String(profile.id || profile.name || '');
+      const button = document.getElementById('copyProfileCardBtn');
+
+      if (!force && preparedProfileCardBlob && preparedProfileCardKey === key) return preparedProfileCardBlob;
+      if (preparingProfileCardPromise) return preparingProfileCardPromise;
+      if (!currentProfileRow || !selectedPhotoDataUrl) return null;
+
+      preparingProfileCardPromise = captureProfileCardBlobRobust().then(function(blob){
+        if (!blob || !blob.size) throw new Error('PNG profil kosong');
+        preparedProfileCardBlob = blob;
+        preparedProfileCardKey = key;
+        if (button) {
+          button.disabled = false;
+          button.innerHTML = '📋';
+          button.title = 'Copy gambar profil';
+        }
+        return blob;
+      }).catch(function(err){
+        preparedProfileCardBlob = null;
+        preparedProfileCardKey = '';
+        if (button) {
+          button.disabled = true;
+          button.innerHTML = '📋';
+          button.title = 'Gambar profil belum siap';
+        }
+        throw err;
+      }).finally(function(){
+        preparingProfileCardPromise = null;
+      });
+      return preparingProfileCardPromise;
+    }
+
+    function getProfilePhotoDataUrlPromise() {
+      if (selectedPhotoDataUrl && String(selectedPhotoDataUrl).indexOf('data:image/') === 0) {
+        return Promise.resolve(selectedPhotoDataUrl);
+      }
+
+      const activeId = String((currentProfileRow && currentProfileRow._profile && currentProfileRow._profile.id) || '').trim();
+      const fileId = String(selectedPhotoFileId || '').trim();
+      const boxImg = document.querySelector('#profilePhotoBox img.profile-photo');
+      const visibleSrc = boxImg ? String(boxImg.currentSrc || boxImg.src || '').trim() : '';
+
+      if (fileId) {
+        return fetchPhotoDataUrlByFileId(fileId).then(function(dataUrl){
+          if (dataUrl && String(dataUrl).indexOf('data:image/') === 0) {
+            selectedPhotoDataUrl = dataUrl;
+            return dataUrl;
+          }
+          if (visibleSrc && visibleSrc.indexOf('data:image/') === 0) {
+            selectedPhotoDataUrl = visibleSrc;
+            return visibleSrc;
+          }
+          throw new Error('Foto belum siap');
+        });
+      }
+
+      if (visibleSrc && visibleSrc.indexOf('data:image/') === 0) {
+        selectedPhotoDataUrl = visibleSrc;
+        return Promise.resolve(visibleSrc);
+      }
+
+      throw new Error('Foto belum siap');
+    }
+
     async function copyProfileCardImage() {
       const card = document.getElementById('profileCard');
       if (!card || !currentProfileRow) {
         showToast('Profil belum tersedia.', 'error', 'Gagal');
-        return;
+        return false;
       }
-
-      // Clipboard gambar harus dipanggil dalam user gesture yang sama.
-      // Jika kita menunggu html2canvas selesai terlebih dahulu, Chrome dapat
-      // menganggap izin clipboard sudah kedaluwarsa. Karena itu ClipboardItem
-      // menerima Promise<Blob> dan navigator.clipboard.write() dipanggil
-      // SEBELUM proses capture selesai.
       if (!window.isSecureContext || !navigator.clipboard || typeof navigator.clipboard.write !== 'function' || !window.ClipboardItem) {
-        showToast('Browser tidak mengizinkan copy gambar. Pastikan aplikasi dibuka melalui HTTPS.', 'error', 'Copy gambar gagal');
-        return;
+        showToast('Copy gambar membutuhkan HTTPS dan Clipboard API aktif.', 'error', 'Copy gambar gagal');
+        return false;
       }
+      if (profileCardCopyBusy) return false;
+
+      const button = document.getElementById('copyProfileCardBtn');
+      const oldHtml = button ? button.innerHTML : '📋';
+      const oldTitle = button ? button.title : 'Copy gambar profil';
+      profileCardCopyBusy = true;
 
       try {
+        if (button) {
+          button.disabled = true;
+          button.innerHTML = '⏳';
+          button.title = 'Menyalin gambar profil...';
+        }
+
         showToast('Menyiapkan gambar profil...', 'success', 'Memproses');
 
-        const imagePromise = (async function () {
-          await ensureHtml2Canvas();
-
-          // Ambil foto sebagai dataUrl supaya html2canvas tidak terkena CORS.
-          if (!selectedPhotoDataUrl && selectedPhotoFileId) {
-            const result = await new Promise((resolve, reject) => {
-              google.script.run
-                .withSuccessHandler(resolve)
-                .withFailureHandler(reject)
-                .getEmployeePhotoDataByFileId(selectedPhotoFileId);
-            });
-            if (result && result.found && result.dataUrl) selectedPhotoDataUrl = result.dataUrl;
-          }
-
-          if (!selectedPhotoDataUrl) {
-            const profileId = String((currentProfileRow._profile || {}).id || '').trim();
-            if (profileId) {
-              const result = await fetchEmployeePhotoDataCached(profileId);
-              if (result && result.found && result.dataUrl) {
-                selectedPhotoFileId = result.fileId || selectedPhotoFileId;
-                selectedPhotoDataUrl = result.dataUrl;
-              }
-            }
-          }
-
-          const captureWrap = document.createElement('div');
-          captureWrap.style.position = 'fixed';
-          captureWrap.style.left = '-100000px';
-          captureWrap.style.top = '0';
-          captureWrap.style.width = Math.max(card.scrollWidth, card.clientWidth) + 'px';
-          captureWrap.style.background = '#ffffff';
-          captureWrap.style.zIndex = '-1';
-          captureWrap.style.pointerEvents = 'none';
-
-          const clone = card.cloneNode(true);
-          clone.classList.add('capture-mode');
-          clone.style.width = getComputedStyle(card).width;
-          clone.style.setProperty('max-height', 'none', 'important');
-          clone.style.setProperty('height', 'auto', 'important');
-          clone.style.setProperty('overflow', 'visible', 'important');
-          clone.style.boxShadow = 'none';
-          clone.style.position = 'relative';
-          clone.style.left = '0';
-          clone.style.top = '0';
-          captureWrap.appendChild(clone);
-          document.body.appendChild(captureWrap);
-
-          if (selectedPhotoDataUrl) {
-            clone.querySelectorAll('.profile-photo').forEach(function (img) {
-              img.removeAttribute('crossorigin');
-              img.src = selectedPhotoDataUrl;
-            });
-          }
-
-          const cloneBody = clone.querySelector('.profile-body');
-          if (cloneBody) {
-            cloneBody.style.setProperty('overflow', 'visible', 'important');
-            cloneBody.style.setProperty('height', 'auto', 'important');
-            cloneBody.style.setProperty('max-height', 'none', 'important');
-          }
-
-          clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn').forEach(function (el) {
-            el.style.display = 'none';
-          });
-
-          // Beri browser waktu merender gambar dataUrl pada clone.
-          await new Promise(function (resolve) { setTimeout(resolve, 80); });
-
-          const canvas = await html2canvas(clone, {
-            backgroundColor: '#ffffff',
-            scale: Math.min(2, window.devicePixelRatio || 1.5),
-            useCORS: true,
-            allowTaint: false,
-            logging: false,
-            imageTimeout: 10000,
-            removeContainer: true
-          });
-
-          captureWrap.remove();
-
-          const blob = await new Promise(function (resolve) {
-            canvas.toBlob(resolve, 'image/png');
-          });
-          if (!blob) throw new Error('Gagal membuat PNG');
-          return blob;
-        })();
-
-        // PENTING: panggil clipboard.write sekarang, sebelum await imagePromise.
-        // Ini mempertahankan transient user activation dari klik tombol.
-        const clipboardItem = new ClipboardItem({
-          'image/png': imagePromise
+        /*
+         * PENTING: jangan await proses foto/html2canvas sebelum write().
+         * ClipboardItem menerima Promise<Blob>, sehingga permintaan clipboard
+         * dimulai langsung dari event klik dan user-activation tetap terjaga.
+         */
+        const photoPromise = getProfilePhotoDataUrlPromise();
+        const blobPromise = Promise.resolve(photoPromise).then(function(photoDataUrl){
+          return captureProfileCardBlobFast(photoDataUrl);
         });
 
+        const clipboardItem = new ClipboardItem({ 'image/png': blobPromise });
         await navigator.clipboard.write([clipboardItem]);
-        await imagePromise;
-        showToast('Gambar profil berhasil disalin ke clipboard.', 'success', 'Berhasil');
+
+        try {
+          const blob = await blobPromise;
+          if (blob && blob.size) {
+            preparedProfileCardBlob = blob;
+            preparedProfileCardKey = String((currentProfileRow._profile || {}).id || (currentProfileRow._profile || {}).name || '');
+          }
+        } catch (_) {}
+
+        showToast('Gambar profil berhasil disalin ke clipboard. Silakan Paste (Ctrl+V).', 'success', 'Berhasil');
+        return true;
       } catch (error) {
         console.error('copyProfileCardImage:', error);
-        showToast(
-          'Gambar profil gagal dicopy ke clipboard. Pastikan browser mengizinkan clipboard gambar.',
-          'error',
-          'Copy gambar gagal'
-        );
+        if (String(error && error.message || '').toLowerCase().includes('foto belum siap')) {
+          showToast('Foto profil masih diproses. Tunggu sampai foto tampil lalu klik Copy lagi.', 'error', 'Foto belum siap');
+        } else {
+          showToast('Gagal copy gambar profil. Silakan coba sekali lagi.', 'error', 'Copy gambar gagal');
+        }
+        return false;
+      } finally {
+        profileCardCopyBusy = false;
+        if (button) {
+          button.disabled = false;
+          button.innerHTML = oldHtml || '📋';
+          button.title = oldTitle || 'Copy gambar profil';
+        }
+      }
+    }
+
+    async function inlineProfileLogoForCapture(clonedCard) {
+      const clonedCvLogo = clonedCard.querySelector('.cv-company-logo');
+      if (!clonedCvLogo) return;
+
+      // FIX FINAL LOGO: gunakan logo yang sudah tertanam di HTML terlebih dahulu.
+      const embedded = String(EMBEDDED_PROFILE_LOGO_DATA_URL || '').trim();
+      if (embedded.indexOf('data:image/') === 0) {
+        clonedCvLogo.innerHTML = '<img alt="Logo">';
+        const img = clonedCvLogo.querySelector('img');
+        img.src = embedded;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+        try { if (img.decode) await img.decode(); } catch (_) {}
+        return;
+      }
+
+      // Fallback ke logo data URL yang sedang dipakai aplikasi.
+      const originalCvLogo = document.getElementById('cvCompanyLogo');
+      const originalImg = originalCvLogo ? originalCvLogo.querySelector('img') : null;
+      const candidates = [];
+      if (originalImg) {
+        const src = String(originalImg.currentSrc || originalImg.src || '').trim();
+        if (src) candidates.push(src);
+      }
+      const configured = String((defaultConfig && defaultConfig.logoDataUrl) || '').trim();
+      if (configured) candidates.push(configured);
+
+      for (const candidate of candidates) {
+        if (candidate.indexOf('data:image/') !== 0) continue;
+        clonedCvLogo.innerHTML = '<img alt="Logo">';
+        const img = clonedCvLogo.querySelector('img');
+        img.src = candidate;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+        try { if (img.decode) await img.decode(); } catch (_) {}
+        return;
+      }
+
+      clonedCvLogo.innerHTML = '<div style="width:100%;height:100%;display:grid;place-items:center;font-weight:900;color:#111827;background:#fff;border:1px solid #111827;">HL</div>';
+    }
+
+    async function captureProfileCardBlobFast(photoDataUrl) {
+      const originalCard = document.getElementById('profileCard');
+      const originalOverlay = document.getElementById('profileOverlay');
+      if (!originalCard || !originalOverlay || !currentProfileRow) throw new Error('Profil belum tersedia');
+      const photoSrc = String(photoDataUrl || selectedPhotoDataUrl || '').trim();
+      if (!photoSrc || photoSrc.indexOf('data:image/') !== 0) throw new Error('Foto belum siap');
+      await ensureHtml2Canvas();
+
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;left:-30000px;top:0;width:' + Math.max(1, Math.ceil(originalCard.getBoundingClientRect().width || 860)) + 'px;padding:0;margin:0;background:#fff;z-index:2147483647;display:block;visibility:visible;opacity:1;overflow:visible;pointer-events:none;';
+
+      const overlayClone = originalOverlay.cloneNode(true);
+      overlayClone.removeAttribute('id');
+      overlayClone.style.cssText = 'position:static !important;display:block !important;width:100% !important;height:auto !important;min-height:0 !important;padding:0 !important;margin:0 !important;background:#fff !important;overflow:visible !important;visibility:visible !important;opacity:1 !important;';
+
+      const clonedCard = overlayClone.querySelector('#profileCard');
+      if (!clonedCard) throw new Error('Kartu profil tidak ditemukan');
+      clonedCard.removeAttribute('id');
+      clonedCard.style.setProperty('position','relative','important');
+      clonedCard.style.setProperty('left','0','important');
+      clonedCard.style.setProperty('top','0','important');
+      clonedCard.style.setProperty('transform','none','important');
+      clonedCard.style.setProperty('margin','0','important');
+      clonedCard.style.setProperty('max-height','none','important');
+      clonedCard.style.setProperty('height','auto','important');
+      clonedCard.style.setProperty('overflow','visible','important');
+      clonedCard.style.setProperty('box-shadow','none','important');
+
+      clonedCard.querySelectorAll('.profile-actions,.photo-action,.copy-mini-btn,.profile-bpjstk-actions,.bpjstk-view-btn,.cv-view-card-btn').forEach(function(el){ el.style.setProperty('display','none','important'); });
+      const clonedBody = clonedCard.querySelector('.profile-body');
+      if (clonedBody) {
+        clonedBody.style.setProperty('overflow','visible','important');
+        clonedBody.style.setProperty('height','auto','important');
+        clonedBody.style.setProperty('max-height','none','important');
+      }
+
+      clonedCard.querySelectorAll('.profile-photo').forEach(function(img){
+        img.removeAttribute('crossorigin');
+        img.removeAttribute('loading');
+        img.removeAttribute('decoding');
+        img.src = photoSrc;
+        img.style.setProperty('display','block','important');
+      });
+
+      clonedCard.querySelectorAll('img').forEach(function(img){
+        if (img.classList.contains('profile-photo')) return;
+        if (img.closest('.cv-company-logo')) return;
+        const src = String(img.src || '');
+        if (src && !src.startsWith('data:')) img.style.setProperty('display','none','important');
+      });
+
+      await inlineProfileLogoForCapture(clonedCard);
+
+      wrap.appendChild(overlayClone);
+      document.body.appendChild(wrap);
+      try {
+        const images = Array.from(clonedCard.querySelectorAll('img'));
+        await Promise.all(images.map(function(img){
+          if (img.complete && (img.naturalWidth || String(img.src).indexOf('data:') === 0)) return Promise.resolve();
+          return new Promise(function(resolve){
+            let done = false;
+            const finish = function(){ if(done) return; done=true; resolve(); };
+            img.addEventListener('load', finish, {once:true});
+            img.addEventListener('error', finish, {once:true});
+            setTimeout(finish, 2500);
+          });
+        }));
+
+        const cardRect = clonedCard.getBoundingClientRect();
+        const width = Math.max(1, Math.ceil(cardRect.width || 860));
+        const height = Math.max(1, Math.ceil(clonedCard.scrollHeight || cardRect.height || 600));
+        const canvas = await html2canvas(clonedCard, {
+          backgroundColor:'#ffffff',
+          scale: Math.min(2, Math.max(1.25, window.devicePixelRatio || 1.25)),
+          useCORS:true,
+          allowTaint:false,
+          logging:false,
+          imageTimeout:2500,
+          removeContainer:true,
+          width:width,
+          height:height,
+          scrollX:0,
+          scrollY:0,
+          windowWidth:Math.max(document.documentElement.clientWidth, width + 40),
+          windowHeight:Math.max(document.documentElement.clientHeight, height + 40)
+        });
+        return await new Promise(function(resolve,reject){
+          canvas.toBlob(function(blob){
+            if (blob && blob.size) resolve(blob); else reject(new Error('Gagal membuat PNG profil'));
+          },'image/png');
+        });
+      } finally {
+        if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
       }
     }
 
@@ -5443,17 +5794,15 @@
     }
 
     async function copyOnlyEmployeePhoto() {
-      // PENTING: untuk tombol Copy foto saja, Clipboard API harus dipanggil
-      // langsung dari event klik. Jangan melakukan await/fetch sebelum write().
+      // Clipboard.write() HARUS dipanggil langsung dari klik tombol.
+      // Jangan menunggu Image.onload / canvas.toBlob sebelum memanggil write(),
+      // karena Chrome dapat kehilangan user activation. ClipboardItem menerima
+      // Promise<Blob>, sehingga proses konversi foto ke PNG berlangsung setelah
+      // permintaan clipboard sudah dimulai.
       try {
-        if (!selectedPhotoDataUrl) {
-          showToast('Foto masih disiapkan. Tunggu sampai tombol Copy aktif.', 'error', 'Foto belum siap');
-          return false;
-        }
-
-        const blob = dataUrlToBlob(selectedPhotoDataUrl);
-        if (!blob || !blob.size) {
-          showToast('Data foto kosong.', 'error', 'Copy foto gagal');
+        const dataUrl = String(selectedPhotoDataUrl || '').trim();
+        if (!dataUrl || dataUrl.indexOf('data:image/') !== 0) {
+          showToast('Foto belum siap. Tunggu sampai foto selesai dimuat.', 'error', 'Foto belum siap');
           return false;
         }
 
@@ -5466,9 +5815,31 @@
           return false;
         }
 
-        // navigator.clipboard.write() dipanggil TANPA await sebelumnya,
-        // sehingga user activation dari klik tombol tetap terjaga.
-        const item = new ClipboardItem({ 'image/png': blob });
+        const pngPromise = new Promise(function(resolve, reject) {
+          const img = new Image();
+          img.onload = function() {
+            try {
+              const canvas = document.createElement('canvas');
+              const width = img.naturalWidth || img.width;
+              const height = img.naturalHeight || img.height;
+              if (!width || !height) throw new Error('Ukuran foto tidak valid');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d', { alpha: true });
+              if (!ctx) throw new Error('Canvas tidak tersedia');
+              ctx.drawImage(img, 0, 0, width, height);
+              canvas.toBlob(function(blob) {
+                if (blob && blob.size) resolve(blob);
+                else reject(new Error('Gagal membuat PNG'));
+              }, 'image/png');
+            } catch (err) { reject(err); }
+          };
+          img.onerror = function() { reject(new Error('Foto tidak dapat dibaca')); };
+          img.src = dataUrl;
+        });
+
+        // INI sengaja dipanggil sebelum await apa pun.
+        const item = new ClipboardItem({ 'image/png': pngPromise });
         const writePromise = navigator.clipboard.write([item]);
         await writePromise;
 
@@ -5476,7 +5847,7 @@
         return true;
       } catch (error) {
         console.error('copyOnlyEmployeePhoto:', error);
-        showToast('Foto tidak bisa dicopy ke clipboard. Pastikan aplikasi dibuka melalui HTTPS dan izin clipboard browser aktif.', 'error', 'Copy foto gagal');
+        showToast('Copy foto gagal. Pastikan izin clipboard browser aktif dan aplikasi dibuka melalui HTTPS.', 'error', 'Copy foto gagal');
         return false;
       }
     }
@@ -5493,7 +5864,63 @@
     }
 
     function printProfile() {
-      window.print();
+      const card = document.getElementById('profileCard');
+      if (!card) {
+        showToast('Profil belum tersedia.', 'error', 'Print gagal');
+        return;
+      }
+
+      // Jangan memakai window.print() pada halaman utama karena CSS aplikasi
+      // menyembunyikan body saat print dan pada beberapa browser hasil preview
+      // menjadi blank. Buat dokumen print khusus yang hanya berisi kartu profil.
+      try {
+        const win = window.open('', '_blank', 'width=1100,height=900');
+        if (!win) {
+          showToast('Popup print diblokir browser. Izinkan popup untuk aplikasi ini.', 'error', 'Print gagal');
+          return;
+        }
+
+        const styles = Array.from(document.querySelectorAll('style')).map(function(style){
+          return '<style>' + style.textContent + '</style>';
+        }).join('\n');
+        const clone = card.cloneNode(true);
+        clone.classList.add('print-profile-only');
+
+        // Semua tombol/aksi tidak ikut dicetak.
+        clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn, .profile-bpjstk-action-row, .profile-bpjstk-menu').forEach(function(el){
+          el.remove();
+        });
+
+        const printCss = `
+          <style>
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+            body { font-family: Arial, Helvetica, sans-serif !important; }
+            .print-page { width: 100%; display: flex; justify-content: center; align-items: flex-start; padding: 12px; box-sizing: border-box; }
+            .print-profile-only { position: relative !important; display: block !important; width: 100% !important; max-width: 1100px !important; height: auto !important; max-height: none !important; min-height: 0 !important; margin: 0 auto !important; overflow: visible !important; border: 2px solid #172033 !important; box-shadow: none !important; border-radius: 0 !important; background: #fff !important; }
+            .print-profile-only .profile-body { height: auto !important; max-height: none !important; overflow: visible !important; }
+            .print-profile-only .detail-grid { overflow: visible !important; }
+            .print-profile-only .profile-bpjstk-panel { break-inside: avoid; }
+            @page { size: auto; margin: 8mm; }
+            @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+          </style>`;
+
+        win.document.open();
+        win.document.write('<!doctype html><html><head><meta charset="UTF-8"><title>Print - ' + escapeHtml((currentProfileRow && currentProfileRow._profile && currentProfileRow._profile.name) || 'Profil Karyawan') + '</title>' + styles + printCss + '</head><body><div class="print-page"></div></body></html>');
+        win.document.close();
+        win.document.querySelector('.print-page').appendChild(clone);
+
+        // Tunggu gambar yang sudah ada di kartu selesai dimuat.
+        waitForPrintImages(win.document, function() {
+          win.focus();
+          setTimeout(function(){
+            win.print();
+            win.onafterprint = function(){ try { win.close(); } catch (_) {} };
+          }, 120);
+        });
+      } catch (error) {
+        console.error('printProfile:', error);
+        showToast('Gagal menyiapkan tampilan print.', 'error', 'Print gagal');
+      }
     }
 
     function closeProfile() {
