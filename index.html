@@ -4827,7 +4827,22 @@
       if (result && result.found && (result.imageUrl || result.dataUrl)) {
         selectedPhotoFileId = result.fileId || '';
         selectedPhotoDataUrl = result.dataUrl || '';
-        copyPhotoBtn.disabled = !(selectedPhotoFileId || selectedPhotoDataUrl);
+
+        // Tombol "Copy foto saja" harus siap dengan dataUrl SEBELUM diklik.
+        // Jika backend hanya mengembalikan fileId/imageUrl, ambil dataUrl di background
+        // sehingga Clipboard API tetap dipanggil langsung dari klik tombol.
+        copyPhotoBtn.disabled = !selectedPhotoDataUrl;
+        if (!selectedPhotoDataUrl && selectedPhotoFileId) {
+          fetchPhotoDataUrlByFileId(selectedPhotoFileId).then(function(dataUrl){
+            const active = currentProfileRow && currentProfileRow._profile ? currentProfileRow._profile : {};
+            const activeId = String(active.id || '').trim();
+            if (activeId !== String(profileId || '').trim()) return;
+            if (dataUrl) {
+              selectedPhotoDataUrl = dataUrl;
+              copyPhotoBtn.disabled = false;
+            }
+          });
+        }
 
         setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, result.fileId || '', progress);
       } else {
@@ -5181,97 +5196,128 @@
     }
 
     async function copyProfileCardImage() {
-      try { await ensureHtml2Canvas(); } catch (error) {
-        showToast(error && error.message ? error.message : 'Library gambar belum berhasil dimuat.', 'error', 'Gagal');
-        return;
-      }
-
       const card = document.getElementById('profileCard');
       if (!card || !currentProfileRow) {
         showToast('Profil belum tersedia.', 'error', 'Gagal');
         return;
       }
 
+      // Clipboard gambar harus dipanggil dalam user gesture yang sama.
+      // Jika kita menunggu html2canvas selesai terlebih dahulu, Chrome dapat
+      // menganggap izin clipboard sudah kedaluwarsa. Karena itu ClipboardItem
+      // menerima Promise<Blob> dan navigator.clipboard.write() dipanggil
+      // SEBELUM proses capture selesai.
+      if (!window.isSecureContext || !navigator.clipboard || typeof navigator.clipboard.write !== 'function' || !window.ClipboardItem) {
+        showToast('Browser tidak mengizinkan copy gambar. Pastikan aplikasi dibuka melalui HTTPS.', 'error', 'Copy gambar gagal');
+        return;
+      }
+
       try {
         showToast('Menyiapkan gambar profil...', 'success', 'Memproses');
 
-        // Pastikan foto profil sudah berupa dataUrl sehingga html2canvas tidak terkena CORS dari Google Drive.
-        if (!selectedPhotoDataUrl && selectedPhotoFileId) {
-          const result = await new Promise((resolve, reject) => {
-            google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getEmployeePhotoDataByFileId(selectedPhotoFileId);
+        const imagePromise = (async function () {
+          await ensureHtml2Canvas();
+
+          // Ambil foto sebagai dataUrl supaya html2canvas tidak terkena CORS.
+          if (!selectedPhotoDataUrl && selectedPhotoFileId) {
+            const result = await new Promise((resolve, reject) => {
+              google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)
+                .getEmployeePhotoDataByFileId(selectedPhotoFileId);
+            });
+            if (result && result.found && result.dataUrl) selectedPhotoDataUrl = result.dataUrl;
+          }
+
+          if (!selectedPhotoDataUrl) {
+            const profileId = String((currentProfileRow._profile || {}).id || '').trim();
+            if (profileId) {
+              const result = await fetchEmployeePhotoDataCached(profileId);
+              if (result && result.found && result.dataUrl) {
+                selectedPhotoFileId = result.fileId || selectedPhotoFileId;
+                selectedPhotoDataUrl = result.dataUrl;
+              }
+            }
+          }
+
+          const captureWrap = document.createElement('div');
+          captureWrap.style.position = 'fixed';
+          captureWrap.style.left = '-100000px';
+          captureWrap.style.top = '0';
+          captureWrap.style.width = Math.max(card.scrollWidth, card.clientWidth) + 'px';
+          captureWrap.style.background = '#ffffff';
+          captureWrap.style.zIndex = '-1';
+          captureWrap.style.pointerEvents = 'none';
+
+          const clone = card.cloneNode(true);
+          clone.classList.add('capture-mode');
+          clone.style.width = getComputedStyle(card).width;
+          clone.style.setProperty('max-height', 'none', 'important');
+          clone.style.setProperty('height', 'auto', 'important');
+          clone.style.setProperty('overflow', 'visible', 'important');
+          clone.style.boxShadow = 'none';
+          clone.style.position = 'relative';
+          clone.style.left = '0';
+          clone.style.top = '0';
+          captureWrap.appendChild(clone);
+          document.body.appendChild(captureWrap);
+
+          if (selectedPhotoDataUrl) {
+            clone.querySelectorAll('.profile-photo').forEach(function (img) {
+              img.removeAttribute('crossorigin');
+              img.src = selectedPhotoDataUrl;
+            });
+          }
+
+          const cloneBody = clone.querySelector('.profile-body');
+          if (cloneBody) {
+            cloneBody.style.setProperty('overflow', 'visible', 'important');
+            cloneBody.style.setProperty('height', 'auto', 'important');
+            cloneBody.style.setProperty('max-height', 'none', 'important');
+          }
+
+          clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn').forEach(function (el) {
+            el.style.display = 'none';
           });
-          if (result && result.found && result.dataUrl) selectedPhotoDataUrl = result.dataUrl;
-        }
 
-        const captureWrap = document.createElement('div');
-        captureWrap.style.position = 'fixed';
-        captureWrap.style.left = '-100000px';
-        captureWrap.style.top = '0';
-        captureWrap.style.width = Math.max(card.scrollWidth, card.clientWidth) + 'px';
-        captureWrap.style.background = '#ffffff';
-        captureWrap.style.zIndex = '-1';
-        captureWrap.style.pointerEvents = 'none';
+          // Beri browser waktu merender gambar dataUrl pada clone.
+          await new Promise(function (resolve) { setTimeout(resolve, 80); });
 
-        const clone = card.cloneNode(true);
-        clone.classList.add('capture-mode');
-        clone.style.width = getComputedStyle(card).width;
-        clone.style.setProperty('max-height', 'none', 'important');
-        clone.style.setProperty('height', 'auto', 'important');
-        clone.style.overflow = 'visible';
-        clone.style.boxShadow = 'none';
-        clone.style.position = 'relative';
-        clone.style.left = '0';
-        clone.style.top = '0';
-        captureWrap.appendChild(clone);
-        document.body.appendChild(captureWrap);
-
-        if (selectedPhotoDataUrl) {
-          clone.querySelectorAll('.profile-photo').forEach(function (img) {
-            img.crossOrigin = 'anonymous';
-            img.src = selectedPhotoDataUrl;
+          const canvas = await html2canvas(clone, {
+            backgroundColor: '#ffffff',
+            scale: Math.min(2, window.devicePixelRatio || 1.5),
+            useCORS: true,
+            allowTaint: false,
+            logging: false,
+            imageTimeout: 10000,
+            removeContainer: true
           });
-        }
 
-        // Hilangkan tombol/interaksi dari hasil gambar, tetapi pertahankan seluruh data.
-        const cloneBody = clone.querySelector('.profile-body');
-        if (cloneBody) {
-          cloneBody.style.setProperty('overflow', 'visible', 'important');
-          cloneBody.style.setProperty('height', 'auto', 'important');
-          cloneBody.style.setProperty('max-height', 'none', 'important');
-        }
-        clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn').forEach(function (el) {
-          el.style.display = 'none';
+          captureWrap.remove();
+
+          const blob = await new Promise(function (resolve) {
+            canvas.toBlob(resolve, 'image/png');
+          });
+          if (!blob) throw new Error('Gagal membuat PNG');
+          return blob;
+        })();
+
+        // PENTING: panggil clipboard.write sekarang, sebelum await imagePromise.
+        // Ini mempertahankan transient user activation dari klik tombol.
+        const clipboardItem = new ClipboardItem({
+          'image/png': imagePromise
         });
 
-        await new Promise(function (resolve) { setTimeout(resolve, 60); });
-
-        const canvas = await html2canvas(clone, {
-          backgroundColor: '#ffffff',
-          scale: Math.min(2, window.devicePixelRatio || 1.5),
-          useCORS: true,
-          allowTaint: false,
-          logging: false,
-          imageTimeout: 10000,
-          removeContainer: true
-        });
-
-        captureWrap.remove();
-
-        const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
-        if (!blob) throw new Error('Gagal membuat PNG');
-
-        try {
-          await writeClipboardImage(blob);
-          showToast('Gambar profil berhasil disalin ke clipboard.', 'success', 'Berhasil');
-        } catch (clipboardError) {
-          console.error('copyProfileCardImage clipboard:', clipboardError);
-          showToast('Gambar profil gagal dicopy ke clipboard. Tidak ada file yang didownload.', 'error', 'Copy gambar gagal');
-        }
+        await navigator.clipboard.write([clipboardItem]);
+        await imagePromise;
+        showToast('Gambar profil berhasil disalin ke clipboard.', 'success', 'Berhasil');
       } catch (error) {
-        const orphan = document.querySelector('body > div[style*="-100000px"]');
-        if (orphan) orphan.remove();
         console.error('copyProfileCardImage:', error);
-        showToast('Gagal copy gambar profil: ' + (error && error.message ? error.message : 'proses capture gagal'), 'error', 'Gagal');
+        showToast(
+          'Gambar profil gagal dicopy ke clipboard. Pastikan browser mengizinkan clipboard gambar.',
+          'error',
+          'Copy gambar gagal'
+        );
       }
     }
 
@@ -5329,7 +5375,7 @@
 
       const copyValue = [
         'Nama : ' + nama,
-        'No.ID : ' + noId,
+        'No ID : ' + noId,
         'No Handphone : ' + noHp,
         'No Rekening : ' + noRekening,
         'No KPJ : ' + noKpj,
@@ -5397,46 +5443,41 @@
     }
 
     async function copyOnlyEmployeePhoto() {
+      // PENTING: untuk tombol Copy foto saja, Clipboard API harus dipanggil
+      // langsung dari event klik. Jangan melakukan await/fetch sebelum write().
       try {
-        const activeProfile = currentProfileRow && currentProfileRow._profile ? currentProfileRow._profile : {};
-        const profileId = String(activeProfile.id || '').trim();
-
-        // Selalu prioritaskan dataUrl yang sudah ada agar copy tidak perlu request ulang.
-        if (!selectedPhotoDataUrl && selectedPhotoFileId) {
-          showToast('Menyiapkan foto...', 'success', 'Foto');
-          const result = await new Promise((resolve, reject) => {
-            google.script.run
-              .withSuccessHandler(resolve)
-              .withFailureHandler(reject)
-              .getEmployeePhotoDataByFileId(selectedPhotoFileId);
-          });
-          if (result && result.found && result.dataUrl) selectedPhotoDataUrl = result.dataUrl;
-        }
-
-        // Fallback terakhir: ambil berdasarkan No.ID jika fileId tidak tersedia.
-        if (!selectedPhotoDataUrl && profileId) {
-          const result = await fetchEmployeePhotoDataCached(profileId);
-          if (result && result.found && result.dataUrl) {
-            selectedPhotoFileId = result.fileId || selectedPhotoFileId;
-            selectedPhotoDataUrl = result.dataUrl;
-          }
-        }
-
         if (!selectedPhotoDataUrl) {
-          showToast('Foto belum tersedia untuk dicopy.', 'error', 'Gagal');
-          return;
+          showToast('Foto masih disiapkan. Tunggu sampai tombol Copy aktif.', 'error', 'Foto belum siap');
+          return false;
         }
 
         const blob = dataUrlToBlob(selectedPhotoDataUrl);
-        try {
-          await writeClipboardImage(blob);
-          showToast('Foto berhasil disalin ke clipboard.', 'success', 'Berhasil');
-        } catch (clipboardError) {
-          console.error('copyOnlyEmployeePhoto clipboard:', clipboardError);
-          showToast('Foto tidak bisa dicopy ke clipboard. Pastikan aplikasi dibuka melalui HTTPS dan izinkan akses clipboard browser.', 'error', 'Copy gambar gagal');
+        if (!blob || !blob.size) {
+          showToast('Data foto kosong.', 'error', 'Copy foto gagal');
+          return false;
         }
+
+        if (!window.isSecureContext) {
+          showToast('Copy foto memerlukan HTTPS.', 'error', 'Copy foto gagal');
+          return false;
+        }
+        if (!navigator.clipboard || typeof navigator.clipboard.write !== 'function' || !window.ClipboardItem) {
+          showToast('Browser tidak mendukung copy gambar ke clipboard.', 'error', 'Copy foto gagal');
+          return false;
+        }
+
+        // navigator.clipboard.write() dipanggil TANPA await sebelumnya,
+        // sehingga user activation dari klik tombol tetap terjaga.
+        const item = new ClipboardItem({ 'image/png': blob });
+        const writePromise = navigator.clipboard.write([item]);
+        await writePromise;
+
+        showToast('Foto berhasil disalin ke clipboard.', 'success', 'Berhasil');
+        return true;
       } catch (error) {
-        showToast('Gagal menyalin foto. Coba buka ulang profil lalu tekan Copy.', 'error', 'Gagal');
+        console.error('copyOnlyEmployeePhoto:', error);
+        showToast('Foto tidak bisa dicopy ke clipboard. Pastikan aplikasi dibuka melalui HTTPS dan izin clipboard browser aktif.', 'error', 'Copy foto gagal');
+        return false;
       }
     }
 
