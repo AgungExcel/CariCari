@@ -696,11 +696,6 @@
 
     .status-badge.active { background: var(--green-bg); border-color: var(--green-line); color: var(--green); }
     .status-badge.resign { background: var(--red-bg); border-color: var(--red-line); color: var(--red); }
-    .status-badge.marital-married { background: var(--green-bg); border-color: var(--green-line); color: var(--green); }
-    .status-badge.marital-single { background: var(--accent-soft); border-color: #bfdbfe; color: #1d4ed8; }
-    .status-badge.marital-widowed { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber); }
-    .status-badge.marital-divorced { background: var(--red-bg); border-color: var(--red-line); color: var(--red); }
-    .status-badge.marital-default { background: #f3f4f6; border-color: var(--line); color: #374151; }
 
     .profile-overlay, .settings-overlay, .birthday-overlay, .idcard-overlay {
       position: fixed;
@@ -1081,16 +1076,6 @@
 
     .cv-status {
       font-weight: 700;
-    }
-
-    .cv-exit-info {
-      font-weight: 600;
-    }
-
-    .cv-status .status-badge {
-      color: var(--red);
-      background: var(--red-bg);
-      border-color: var(--red-line);
     }
 
     .profile-card.layout-cv.capture-mode {
@@ -3497,8 +3482,8 @@
         </div>
 
         <div class="profile-actions">
-          <button type="button" id="copyProfileCardBtn" class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">📋</button>
-          <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data personal: Nama, No ID, No KPJ, NIK">📝</button>
+          <button id="copyProfileCardBtn" class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">📋</button>
+          <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data personal: Nama, No.ID, No Handphone, No Rekening, No KPJ, NIK">📝</button>
           <button class="icon-btn amber" onclick="cycleProfileLayout()" title="Ganti layout profil">▦</button>
           <button class="icon-btn secondary" onclick="printProfile()" title="Print / Export PDF">🖨</button>
           <button class="icon-btn danger" onclick="closeProfile()" title="Tutup">×</button>
@@ -3579,6 +3564,9 @@
           <button class="icon-btn primary photo-index-button" id="rebuildPhotoIndexBtn" onclick="rebuildPhotoIndexFromButton()" title="Update Index Foto">🔄 Update Index Foto</button>
         </div>
         <div class="photo-index-status" id="photoIndexStatus">Status: siap.</div>
+        <div class="form-help" style="margin-top:8px">
+          Database karyawan: <b>Supabase</b>. Foto karyawan masih berasal dari <b>Google Apps Script/Google Drive</b>.
+        </div>
       </div>
 
       <div class="modal-actions">
@@ -3831,18 +3819,157 @@
 
   <div class="toast-wrap" id="toastWrap"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
+    /* SUPABASE DATABASE */
+    const CARICARI_SUPABASE_URL = 'https://dqoscicvmeosfbqeerpu.supabase.co';
+    const CARICARI_SUPABASE_KEY = 'sb_publishable_Pin0WOrPovyF_qYw2xFtKw_t7MWQ0qT';
+    const caricariSupabase = window.supabase.createClient(
+      CARICARI_SUPABASE_URL,
+      CARICARI_SUPABASE_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+    );
+
+    const CARICARI_SUPABASE_HEADERS = [
+      'NOMOR ID','NAMA','SECTION','JOIN DATE','NO KTP','NO HP',
+      'NO BPJS KESEHATAN','NO BPJAMSOSTEK ( NO KPJ )','TEMPAT LAHIR',
+      'TANGGAL LAHIR','ALAMAT','NOMOR REKENING','STATUS','CABANG',
+      'TANGGAL KELUAR','ALASAN KELUAR','FASKES 1','FASKES GIGI',
+      'JENIS KELAMIN','POSISI','DEPARTEMEN','STATUS PERKAWINAN'
+    ];
+
+    const CARICARI_SUPABASE_COLUMNS = [
+      'nomor_id','nama','section','join_date','no_ktp','no_hp',
+      'no_bpjs_kesehatan','no_bpjamsostek','tempat_lahir',
+      'tanggal_lahir','alamat','nomor_rekening','status','cabang',
+      'tanggal_keluar','alasan_keluar','faskes_1','faskes_gigi',
+      'jenis_kelamin','posisi','departemen','status_perkawinan'
+    ];
+
+    function caricariSupabaseRowToAppRow(row) {
+      const out = {};
+      CARICARI_SUPABASE_COLUMNS.forEach(function(col, i) {
+        let value = row ? row[col] : '';
+        if (value === null || value === undefined) value = '';
+        out[CARICARI_SUPABASE_HEADERS[i]] = value;
+      });
+      return out;
+    }
+
+    function getRowValueByAliases(row, aliases) {
+      if (!row) return '';
+      const headers = Object.keys(row);
+      const wanted = (aliases || []).map(normalizeText);
+      for (let i = 0; i < headers.length; i++) {
+        const header = headers[i];
+        if (header && header.charAt(0) === '_') continue;
+        const normalizedHeader = normalizeText(header);
+        if (wanted.some(function (alias) {
+          return normalizedHeader === alias || normalizedHeader.includes(alias);
+        })) {
+          const value = row[header];
+          if (value !== null && value !== undefined && String(value).trim() !== '') return value;
+        }
+      }
+      return '';
+    }
+
+    function enrichSupabaseRowProfile(row) {
+      if (!row || typeof row !== 'object') return row;
+
+      const id = String(getRowValueByAliases(row, ['nomor id', 'no id', 'id karyawan', 'employee id']) || '').trim();
+      const name = String(getRowValueByAliases(row, ['nama', 'nama karyawan', 'employee name', 'name']) || '').trim();
+      const section = String(getRowValueByAliases(row, ['section']) || '').trim();
+      const branch = String(getRowValueByAliases(row, ['cabang', 'branch', 'unit']) || '').trim();
+      const position = String(getRowValueByAliases(row, ['posisi', 'jabatan', 'position', 'job title', 'title']) || '').trim();
+      const department = String(getRowValueByAliases(row, ['departemen', 'department', 'dept', 'bagian', 'divisi', 'division']) || '').trim();
+      const joinDate = getRowValueByAliases(row, ['join date', 'tanggal masuk', 'tgl masuk', 'joindate']);
+      const birthDate = getRowValueByAliases(row, ['tanggal lahir', 'tgl lahir', 'dob', 'birth date']);
+
+      let age = '-';
+      let workPeriod = '-';
+      try {
+        const birth = parseClientDate(birthDate);
+        if (birth) {
+          const calculatedAge = calculateAgeAtDate(birth, new Date());
+          if (Number.isFinite(calculatedAge)) age = String(calculatedAge);
+        }
+      } catch (_) {}
+      try {
+        const join = parseClientDate(joinDate);
+        if (join) {
+          const today = getStartOfDay(new Date());
+          let years = today.getFullYear() - join.getFullYear();
+          let months = today.getMonth() - join.getMonth();
+          if (today.getDate() < join.getDate()) months--;
+          if (months < 0) { years--; months += 12; }
+          if (years < 0) { years = 0; months = 0; }
+          workPeriod = years + ' Tahun ' + months + ' Bulan';
+        }
+      } catch (_) {}
+
+      row._profile = {
+        id: id || '-',
+        name: name || '-',
+        section: section || department || '-',
+        branch: branch || '-',
+        position: position || '-',
+        department: department || section || '-',
+        age: age,
+        workPeriod: workPeriod
+      };
+
+      return row;
+    }
+
+    async function fetchAllEmployeesFromSupabase() {
+      // Ambil semua kolom yang memang ada di tabel Supabase.
+      // Ini lebih aman daripada memilih nama kolom satu per satu.
+      const PAGE = 1000;
+      let raw = [];
+
+      for (let start = 0; start < 100000; start += PAGE) {
+        const result = await caricariSupabase
+          .from('employees')
+          .select('*')
+          .order('id', { ascending: true })
+          .range(start, start + PAGE - 1);
+
+        if (result.error) {
+          throw new Error('Supabase SELECT gagal: ' + result.error.message);
+        }
+
+        const page = result.data || [];
+        raw = raw.concat(page);
+
+        if (page.length < PAGE) break;
+      }
+
+      if (!raw.length) {
+        throw new Error('Supabase terhubung, tetapi query mengembalikan 0 data. Periksa policy SELECT/RLS pada public.employees.');
+      }
+
+      return {
+        headers: CARICARI_SUPABASE_HEADERS.slice(),
+        rows: raw.map(caricariSupabaseRowToAppRow)
+      };
+    }
+
     let allHeaders = [];
     let allRows = [];
     let filteredRows = [];
     let selectedPhotoFileId = '';
     let selectedPhotoDataUrl = '';
-    let uploadedLogoDataUrl = '';
-    let currentProfileRow = null;
     let preparedProfileCardBlob = null;
     let preparedProfileCardKey = '';
     let preparingProfileCardPromise = null;
-    let profileCardCopyBusy = false;
+
+    function setProfileCardCopyReady(ready) {
+      const btn = document.getElementById('copyProfileCardBtn');
+      if (btn) btn.disabled = !ready;
+    }
+    let uploadedLogoDataUrl = '';
+    let currentProfileRow = null;
     let searchTimer = null;
     let confirmDialogResolve = null;
     let loadProgressTimer = null;
@@ -3851,7 +3978,7 @@
     let loadProgressValue = 0;
     let photoCache = {};
     const PHOTO_CACHE_LIMIT = 120;
-    const SHEET_DATA_CACHE_KEY = 'CARICARI_SHEET_DATA_CACHE_V3';
+    const SHEET_DATA_CACHE_KEY = 'CARICARI_SUPABASE_DATA_CACHE_V2';
     const SHEET_DATA_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const LOAD_SLOW_NOTICE_MS = 9000;
 
@@ -3883,13 +4010,11 @@
       birthDate: '',
       position: '',
       gender: '',
-      maritalStatus: '',
       exitDate: ''
     };
 
     const CARICARI_BACKEND_URL = 'https://script.google.com/macros/s/AKfycby_bGpxi9KOB4EZA3PD21ND8eLbTKE1-ljXidgXEqVhx4Lr4n7fW9yQFjm67FoDsikI8A/exec';
     const CARICARI_LOCAL_LOGO_URL = 'hoplun.png';
-    const EMBEDDED_PROFILE_LOGO_DATA_URL = 'data:image/png;base64,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';
     const DEFAULT_FAVICON_ICO = CARICARI_LOCAL_LOGO_URL;
     const DEFAULT_FAVICON_PNG = CARICARI_LOCAL_LOGO_URL;
 
@@ -3916,7 +4041,7 @@
     function sanitizeUpperFileName(rawName, ext){const base=String(rawName||'FILE').replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').replace(/\s*-\s*/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').trim().toLocaleUpperCase('id-ID'); return (base||'FILE')+(ext||'').toLowerCase();}
     function createPhotoProgress(container,labelText){if(!container)return{set(){},done(){},fail(){},remove(){}};const wrap=document.createElement('div');wrap.className='photo-progress-wrap';wrap.innerHTML=`<div class="photo-progress-label">${escapeHtml(labelText||'Mencari foto...')}</div><div class="photo-progress-bar"><div class="photo-progress-fill"></div></div><div class="photo-progress-percent">0%</div>`;container.innerHTML='';container.appendChild(wrap);const fill=wrap.querySelector('.photo-progress-fill'), pct=wrap.querySelector('.photo-progress-percent'), label=wrap.querySelector('.photo-progress-label');let p=0,active=true,tick=0;function set(v){p=Math.max(0,Math.min(100,Math.round(v)));if(fill)fill.style.width=p+'%';if(pct)pct.textContent=p+'%';}const timer=setInterval(()=>{if(!active)return;tick++;if(tick===55&&label)label.textContent='Masih mencari foto...';const step=p<45?7:(p<75?4:(p<94?2:1));set(Math.min(99,p+step));},220);set(5);return{set,done(){active=false;clearInterval(timer);set(100)},fail(){active=false;clearInterval(timer);set(100);if(label)label.textContent='Foto tidak ditemukan';},remove(){active=false;clearInterval(timer);if(wrap.parentNode)wrap.parentNode.removeChild(wrap);}};}
 
-    // Bridge GitHub Pages -> Google Apps Script Web App.
+    // Bridge GitHub Pages -> Google Apps Script Web App untuk fitur non-database.
     // Di Apps Script asli, google.script.run sudah tersedia.
     // Di GitHub Pages, polyfill ini memakai JSONP ke URL Web App di CARICARI_BACKEND_URL.
     (function setupCaricariGithubBridge() {
@@ -4079,9 +4204,13 @@
     }
 
 
+    // Local HTML mode: database utama berasal dari Supabase.
+    // Google Apps Script hanya dipakai oleh fitur lama seperti foto/pengaturan global.
+    window.CARICARI_LOCAL_SUPABASE_MODE = true;
+
     document.addEventListener('DOMContentLoaded', function () {
       loadConfig();
-      reloadData();
+      reloadData({forceFresh: true});
 
       document.getElementById('searchInput').addEventListener('input', function () {
         forceUppercaseInput(this);
@@ -4091,6 +4220,14 @@
     });
 
     function loadConfig() {
+      // File HTML lokal tidak mempunyai google.script.run.
+      // Jangan biarkan konfigurasi Google Apps Script menghentikan
+      // proses loading database Supabase.
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        applySavedSettings();
+        return;
+      }
+
       google.script.run
         .withSuccessHandler(function (config) {
           defaultConfig = config || defaultConfig;
@@ -4103,6 +4240,13 @@
     }
 
     function applySavedSettings() {
+      try {
+        const local = JSON.parse(localStorage.getItem('CARICARI_LOCAL_SETTINGS_V1') || 'null');
+        if (local && typeof local === 'object') {
+          defaultConfig = Object.assign({}, defaultConfig, local);
+        }
+      } catch (_) {}
+
       const appTitle = defaultConfig.appTitle || 'CariCari';
       const logoDataUrl = defaultConfig.logoDataUrl || CARICARI_LOCAL_LOGO_URL;
       const faviconDataUrl = defaultConfig.faviconDataUrl || CARICARI_LOCAL_LOGO_URL;
@@ -4175,6 +4319,14 @@
 
       defaultConfig.profileLayout = next;
       applyProfileLayout(next);
+
+      if (window.CARICARI_LOCAL_SUPABASE_MODE && (!window.google || !google.script || !google.script.run)) {
+        try {
+          localStorage.setItem('CARICARI_LOCAL_SETTINGS_V1', JSON.stringify(defaultConfig));
+        } catch (_) {}
+        showToast('Layout profil diganti ke ' + next.toUpperCase() + '.', 'success', 'Layout');
+        return;
+      }
 
       google.script.run
         .withSuccessHandler(function (config) {
@@ -4310,6 +4462,15 @@
       status.className = 'photo-index-status';
       status.textContent = 'Sedang membaca folder dan sub-folder foto. Mohon tunggu, proses pertama bisa agak lama...';
 
+      if (window.CARICARI_LOCAL_SUPABASE_MODE && (!window.google || !google.script || !google.script.run)) {
+        btn.disabled = false;
+        btn.textContent = '🔄 Update Index Foto';
+        status.className = 'photo-index-status error';
+        status.textContent = 'Update Index Foto membutuhkan backend Google Apps Script foto.';
+        showToast('Index foto belum dipindahkan ke Supabase. Foto tetap memakai backend Google Apps Script.', 'error', 'Backend Foto');
+        return;
+      }
+
       google.script.run
         .withSuccessHandler(function (message) {
           btn.disabled = false;
@@ -4333,6 +4494,20 @@
       const appTitle = document.getElementById('settingAppTitle').value.trim();
       const layout = document.getElementById('settingProfileLayout').value || 'cv';
 
+      if (window.CARICARI_LOCAL_SUPABASE_MODE && (!window.google || !google.script || !google.script.run)) {
+        defaultConfig.appTitle = appTitle || defaultConfig.appTitle || 'CariCari';
+        defaultConfig.profileLayout = layout;
+        defaultConfig.logoDataUrl = uploadedLogoDataUrl || defaultConfig.logoDataUrl || CARICARI_LOCAL_LOGO_URL;
+        defaultConfig.faviconDataUrl = defaultConfig.logoDataUrl || CARICARI_LOCAL_LOGO_URL;
+        try {
+          localStorage.setItem('CARICARI_LOCAL_SETTINGS_V1', JSON.stringify(defaultConfig));
+        } catch (_) {}
+        applySavedSettings();
+        closeSettings();
+        showToast('Pengaturan disimpan di browser ini.', 'success', 'Berhasil');
+        return;
+      }
+
       google.script.run
         .withSuccessHandler(function (config) {
           defaultConfig = config || defaultConfig;
@@ -4346,12 +4521,27 @@
         .saveAppSettings({
           appTitle: appTitle || defaultConfig.appTitle,
           profileLayout: layout,
-          logoDataUrl: CARICARI_LOCAL_LOGO_URL,
-          faviconDataUrl: CARICARI_LOCAL_LOGO_URL
+          logoDataUrl: uploadedLogoDataUrl || CARICARI_LOCAL_LOGO_URL,
+          faviconDataUrl: uploadedLogoDataUrl || CARICARI_LOCAL_LOGO_URL
         });
     }
 
     function resetSettings() {
+      if (window.CARICARI_LOCAL_SUPABASE_MODE && (!window.google || !google.script || !google.script.run)) {
+        defaultConfig = {
+          appTitle: 'CariCari',
+          profileLayout: 'cv',
+          logoDataUrl: CARICARI_LOCAL_LOGO_URL,
+          faviconDataUrl: CARICARI_LOCAL_LOGO_URL
+        };
+        uploadedLogoDataUrl = '';
+        try { localStorage.removeItem('CARICARI_LOCAL_SETTINGS_V1'); } catch (_) {}
+        applySavedSettings();
+        closeSettings();
+        showToast('Pengaturan browser dikembalikan ke default.', 'success', 'Reset');
+        return;
+      }
+
       google.script.run
         .withSuccessHandler(function (config) {
           defaultConfig = config || defaultConfig;
@@ -4366,89 +4556,58 @@
         .resetAppSettings();
     }
 
-    function reloadData(options) {
+    async function reloadData(options) {
       hideError();
       const opt = options || {};
       const requestId = ++activeLoadRequestId;
-      const cachedShown = !opt.forceFresh && showCachedSheetData();
 
-      // Cache langsung tampil. Refresh terbaru berjalan diam-diam.
+      // Untuk memastikan test pertama benar-benar membaca Supabase,
+      // cache versi lama tidak dipakai saat forceFresh=true.
+      const cachedShown = !opt.forceFresh && showCachedSheetData();
       if (cachedShown) stopLoadingProgress();
 
-      const showInitialAndSync = function (result) {
+      try {
+        const result = await fetchAllEmployeesFromSupabase();
         if (requestId !== activeLoadRequestId) return;
 
-        stopLoadingProgress();
-
-        processLoadedData(result, {
+        saveSheetDataCache(result);
+        await processLoadedData(result, {
           fromCache: false,
           preserveSearch: cachedShown,
           silentToast: true,
           silentLoading: true
         });
 
-        // Setelah 100 data pertama tampil, sinkronkan seluruh data di background.
-        // Tidak ada progress/loading yang ditampilkan.
-        google.script.run
-          .withSuccessHandler(function (fullResult) {
-            if (requestId !== activeLoadRequestId) return;
+        showToast(
+          'Supabase berhasil dimuat: ' +
+          Number(result.rows.length || 0).toLocaleString('id-ID') +
+          ' data.',
+          'success',
+          'Database Supabase'
+        );
 
-            saveSheetDataCache(fullResult);
+        console.info('[CariCari] Audit database:', {
+          total: result.rows.length,
+          headers: result.headers,
+          source: 'Supabase public.employees',
+          photoSource: 'Google Apps Script / Google Drive'
+        });
+      } catch (error) {
+        if (requestId !== activeLoadRequestId) return;
+        console.error('Supabase load error:', error);
+        stopLoadingProgress();
+        showError(error && error.message ? error.message : String(error));
 
-            allHeaders = Array.isArray(fullResult && fullResult.headers) ? fullResult.headers : allHeaders;
-            allRows = Array.isArray(fullResult && fullResult.rows) ? fullResult.rows : allRows;
-
-            if (!cachedShown) {
-              filteredRows = allRows;
-              setSummaryText('filteredSummary', filteredRows.length);
-              runWhenIdle(function(){ try { buildFilters(); } catch (e) {} });
-              runWhenIdle(function(){ try { updateHeaderStats(); } catch (e) {} });
-              runWhenIdle(function(){ try { prepareRowsForFastSearch(0,0,true); } catch (e) {} });
-            }
-
-            // Sinkronisasi selesai 100%: tampilkan notifikasi kecil lalu hilang otomatis.
-            showToast('Data sudah sinkron 100%.', 'success', 'Sinkronisasi selesai');
-          })
-          .withFailureHandler(function () {
-            // Sinkronisasi background gagal tidak mengganggu data yang sudah tampil.
-          })
-          .getSheetData();
-      };
-
-      if (cachedShown) {
-        // Cache sudah tampil; server cukup mengambil versi terbaru di background.
-        google.script.run
-          .withSuccessHandler(function (fullResult) {
-            if (requestId !== activeLoadRequestId) return;
-            saveSheetDataCache(fullResult);
-            allHeaders = Array.isArray(fullResult && fullResult.headers) ? fullResult.headers : allHeaders;
-            allRows = Array.isArray(fullResult && fullResult.rows) ? fullResult.rows : allRows;
-            filteredRows = allRows;
-            setSummaryText('filteredSummary', filteredRows.length);
-            runWhenIdle(function(){ try { buildFilters(); } catch (e) {} });
-            runWhenIdle(function(){ try { updateHeaderStats(); } catch (e) {} });
-            runWhenIdle(function(){ try { prepareRowsForFastSearch(0,0,true); } catch (e) {} });
-
-            // Cache sudah tampil; setelah versi terbaru selesai disinkronkan, beri notifikasi singkat.
-            showToast('Data sudah sinkron 100%.', 'success', 'Sinkronisasi selesai');
-          })
-          .withFailureHandler(function () {})
-          .getSheetData();
-        return;
-      }
-
-      // First paint: hanya 100 data.
-      google.script.run
-        .withSuccessHandler(showInitialAndSync)
-        .withFailureHandler(function (error) {
-          if (requestId !== activeLoadRequestId) return;
-          stopLoadingProgress();
-          showError(error && error.message ? error.message : String(error));
-          const container = document.getElementById('tableContainer');
+        const container = document.getElementById('tableContainer');
+        if (container) {
           container.className = 'empty';
-          container.innerHTML = 'Gagal memuat data.';
-        })
-        .getSheetDataInitial();
+          container.innerHTML =
+            '<div style="font-size:18px;font-weight:900;color:#b42318;margin-bottom:8px">❌ Gagal memuat data Supabase</div>' +
+            '<div style="font-size:13px;color:#667085">' +
+            escapeHtml(error && error.message ? error.message : String(error)) +
+            '</div>';
+        }
+      }
     }
 
     async function processLoadedData(result, options) {
@@ -4459,6 +4618,14 @@
         // Tidak ada progress/loading overlay.
         allHeaders = Array.isArray(result && result.headers) ? result.headers : [];
         allRows = Array.isArray(result && result.rows) ? result.rows : [];
+
+        // V6 FIX: data dari Supabase sebelumnya hanya berisi kolom asli,
+        // sedangkan fitur lama (Profil, Birthday, Retirement, dll.) juga
+        // mengharapkan metadata _profile yang dahulu disiapkan oleh backend.
+        // Sekarang metadata itu dibentuk langsung dari 22 kolom Supabase.
+        allRows.forEach(function (row) {
+          enrichSupabaseRowProfile(row);
+        });
         filteredRows = allRows;
 
         // Pemrosesan header berjalan tanpa menampilkan loading.
@@ -4596,7 +4763,6 @@
       filterHeaders.birthDate = findHeaderByAliases(['tanggal lahir', 'tgl lahir', 'tanngal lahir', 'tanggallahir', 'tanggal_lahir', 'date of birth', 'birth date', 'birthdate', 'dob', 'lahir']);
       filterHeaders.position = findHeaderByAliases(['jabatan', 'posisi', 'position', 'job title', 'title']);
       filterHeaders.gender = findHeaderByAliases(['jenis kelamin', 'gender', 'sex', 'jk', 'kelamin']);
-      filterHeaders.maritalStatus = findHeaderByAliases(['status pernikahan', 'status perkawinan', 'status kawin', 'perkawinan', 'pernikahan', 'marital status', 'marital', 'marriage status', 'civil status']);
       filterHeaders.exitDate = findHeaderByAliases(['tanggal keluar', 'tgl keluar', 'resign date', 'date resign', 'tanggal resign', 'keluar']);
     }
 
@@ -4696,10 +4862,15 @@
     }
 
     function getEmployeeType(row) {
-      const sources = [];
+      // Prioritas utama mengikuti sumber kolom STATUS.
+      // Ini menjaga WORKER/STAFF/MANAGER/EXPAT tetap sama seperti database.
+      const exactStatus = normalizeText(filterHeaders.status ? row[filterHeaders.status] : '');
+      if (['worker','staff','manager','expat'].includes(exactStatus)) {
+        return exactStatus.toUpperCase();
+      }
 
+      const sources = [];
       if (filterHeaders.employeeType) sources.push(row[filterHeaders.employeeType]);
-      if (filterHeaders.status) sources.push(row[filterHeaders.status]);
       if (filterHeaders.position) sources.push(row[filterHeaders.position]);
 
       const text = normalizeText(sources.join(' '));
@@ -4768,38 +4939,11 @@
       container.innerHTML = html;
     }
 
-    function normalizeMaritalStatus(value) {
-      const raw = String(value == null ? '' : value).trim();
-      if (!raw || raw === '-') return '-';
-      const normalized = normalizeText(raw);
-      const firstCode = normalized.split(/\s|[-_/]/)[0];
-      if (['m', 'married', 'kawin', 'menikah', 'nikah'].includes(normalized) || firstCode === 'm') return 'Kawin (Married)';
-      if (['s', 'single', 'tidak kawin', 'belum kawin', 'belum menikah'].includes(normalized) || firstCode === 's') return 'Tidak Kawin (Single)';
-      if (['w', 'widowed', 'widow', 'widower', 'duda', 'janda', 'duda janda'].includes(normalized) || firstCode === 'w') return 'Duda/Janda (Widowed)';
-      if (['d', 'divorced', 'cerai', 'cerai hidup'].includes(normalized) || firstCode === 'd') return 'Cerai (Divorced)';
-      return raw;
-    }
-
-    function renderMaritalStatusBadge(value) {
-      const label = normalizeMaritalStatus(value);
-      const normalized = normalizeText(label);
-      let cls = 'marital-default';
-      if (normalized.includes('kawin') && normalized.includes('married')) cls = 'marital-married';
-      else if (normalized.includes('single') || normalized.includes('tidak kawin')) cls = 'marital-single';
-      else if (normalized.includes('widowed') || normalized.includes('duda') || normalized.includes('janda')) cls = 'marital-widowed';
-      else if (normalized.includes('divorced') || normalized.includes('cerai')) cls = 'marital-divorced';
-      return '<span class=\"status-badge ' + cls + '\">' + escapeHtml(label) + '</span>';
-    }
-
     function renderTableCell(row, header, keyword) {
       const value = row[header] == null ? '' : String(row[header]);
 
       if (filterHeaders.status && header === filterHeaders.status) {
         return renderStatusBadge(value, row);
-      }
-
-      if (filterHeaders.maritalStatus && header === filterHeaders.maritalStatus) {
-        return renderMaritalStatusBadge(value);
       }
 
       return highlightText(value, keyword);
@@ -4834,20 +4978,23 @@
 
       renderProfilePhoto(profile);
       renderDetailGrid(row);
+      preparedProfileCardBlob = null;
+      preparedProfileCardKey = String(profile.id || profile.name || '');
+      preparingProfileCardPromise = null;
+      setProfileCardCopyReady(false);
 
       document.getElementById('profileOverlay').classList.add('active');
       document.body.classList.add('lock-scroll');
 
-      // Copy Profil disiapkan hanya saat dibutuhkan agar modal tidak loading lama.
-      preparedProfileCardBlob = null;
-      preparedProfileCardKey = '';
-      preparingProfileCardPromise = null;
-      const copyProfileBtn = document.getElementById('copyProfileCardBtn');
-      if (copyProfileBtn) {
-        copyProfileBtn.disabled = false;
-        copyProfileBtn.innerHTML = '📋';
-        copyProfileBtn.title = 'Copy gambar profil';
-      }
+      // Persiapan akan dipicu lagi setelah data foto siap. Ini mencegah
+      // html2canvas menangkap kartu sebelum foto profil tersedia.
+      setTimeout(function () {
+        prepareProfileCardImage().then(function () {
+          setProfileCardCopyReady(true);
+        }).catch(function (error) {
+          console.warn('Persiapan copy gambar profil:', error);
+        });
+      }, 500);
     }
 
     function renderProfilePhoto(profile) {
@@ -4887,6 +5034,7 @@
       if (result && result.found && (result.imageUrl || result.dataUrl)) {
         selectedPhotoFileId = result.fileId || '';
         selectedPhotoDataUrl = result.dataUrl || '';
+
         // Tombol "Copy foto saja" harus siap dengan dataUrl SEBELUM diklik.
         // Jika backend hanya mengembalikan fileId/imageUrl, ambil dataUrl di background
         // sehingga Clipboard API tetap dipanggil langsung dari klik tombol.
@@ -4899,12 +5047,30 @@
             if (dataUrl) {
               selectedPhotoDataUrl = dataUrl;
               copyPhotoBtn.disabled = false;
+              setTimeout(function () {
+                prepareProfileCardImage().then(function () {
+                  setProfileCardCopyReady(true);
+                }).catch(function (error) {
+                  console.warn('Persiapan copy gambar profil:', error);
+                });
+              }, 80);
             }
           });
         }
 
         setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, result.fileId || '', progress);
 
+        // Begitu dataUrl sudah tersedia, siapkan seluruh kartu di background.
+        // Tombol Copy Profil baru diaktifkan setelah PNG kartu benar-benar jadi.
+        if (selectedPhotoDataUrl) {
+          setTimeout(function () {
+            prepareProfileCardImage().then(function () {
+              setProfileCardCopyReady(true);
+            }).catch(function (error) {
+              console.warn('Persiapan copy gambar profil:', error);
+            });
+          }, 80);
+        }
       } else {
         if(progress) progress.fail();
         setTimeout(function(){showProfileInitial(initial);}, progress ? 500 : 0);
@@ -4924,6 +5090,15 @@
       img.onload = function () {
         if(progress) progress.done();
         box.innerHTML = ''; box.appendChild(img);
+        if (selectedPhotoDataUrl) {
+          setTimeout(function () {
+            prepareProfileCardImage().then(function () {
+              setProfileCardCopyReady(true);
+            }).catch(function (error) {
+              console.warn('Persiapan copy gambar profil:', error);
+            });
+          }, 80);
+        }
       };
       img.onerror = function () {
         if (!fallbackTried && fileId && String(imageUrl||'').indexOf('data:') !== 0) {
@@ -5001,15 +5176,11 @@
             ${canViewKartu ? `<button type="button" class="cv-view-card-btn" title="Lihat Kartu BPJSTK" onclick="showProfileBpjstkCard(event)">🪪 Lihat Kartu</button>` : ''}
           </span>` : '';
 
-        const renderedValue = extraClass === 'cv-status'
-          ? renderStatusBadge(cleanValue, currentProfileRow || row)
-          : escapeHtml(cleanValue);
-
         return `
           <div class="cv-row">
             <div class="cv-label">${escapeHtml(label)}</div>
             <div class="cv-separator">:</div>
-            <div class="cv-value ${extraClass || ''}"><span class="cv-text">${renderedValue}</span>${actionHtml}</div>
+            <div class="cv-value ${extraClass || ''}"><span class="cv-text">${escapeHtml(cleanValue)}</span>${actionHtml}</div>
           </div>
         `;
       }
@@ -5022,15 +5193,11 @@
       const departemenRaw = find(['departemen', 'department', 'dept', 'bagian', 'divisi', 'division']);
       const departemen = departemenRaw && departemenRaw !== '-' ? departemenRaw : section;
       const status = getDisplayStatus(row);
-      const sudahKeluar = isResigned(row);
-      const tanggalKeluar = find(['tanggal keluar', 'tgl keluar', 'resign date', 'date resign', 'tanggal resign', 'keluar']);
-      const alasanKeluar = find(['alasan keluar', 'reason keluar', 'resign reason', 'alasan resign', 'exit reason', 'reason for leaving']);
 
       const tempatLahir = find(['tempat lahir', 'birth place']);
       const tanggalLahir = find(['tanggal lahir', 'tgl lahir', 'dob']);
       const joinDate = find(['join date', 'joindate', 'tanggal masuk', 'tgl masuk']);
       const jenisKelamin = find(['jenis kelamin', 'gender', 'sex', 'jk', 'kelamin']);
-      const statusPernikahan = filterHeaders.maritalStatus ? normalizeMaritalStatus(row[filterHeaders.maritalStatus]) : find(['status pernikahan', 'status perkawinan', 'status kawin', 'perkawinan', 'pernikahan', 'marital status']);
       const noHp = find(['no hp', 'hp', 'handphone', 'phone']);
       const alamat = find(['alamat', 'address']);
       const noKtp = find(['no ktp', 'nik', 'nomor ktp']);
@@ -5050,7 +5217,6 @@
       html += rowLine('Posisi', posisi);
       html += rowLine('Cabang', cabang);
       html += rowLine('Jenis Kelamin', jenisKelamin);
-      html += rowLine('Status Pernikahan', statusPernikahan);
       html += rowLine('Tempat, Tanggal Lahir', `${tempatLahir}, ${tanggalLahir}`);
       html += rowLine('Join Date', joinDate);
       html += rowLine('Usia', profile.age || '-');
@@ -5058,10 +5224,6 @@
       html += rowLine('Gaji Pokok', gajiPokok, '', true);
       html += rowLine('Handphone', noHp, '', true);
       html += rowLine('Status', status, 'cv-status');
-      if (sudahKeluar) {
-        html += rowLine('Tanggal Keluar', tanggalKeluar, 'cv-exit-info');
-        html += rowLine('Alasan Keluar', alasanKeluar, 'cv-exit-info');
-      }
       html += rowLine('Alamat', alamat, '', true);
       html += `</div>`;
 
@@ -5170,11 +5332,15 @@
 
     function isCopyableHeader(header) {
       const h = normalizeText(header);
-      // Copy data personal dibatasi hanya pada 4 field berikut.
       return h === 'nama' || h === 'nama karyawan' || h === 'employee name' ||
         h === 'no id' || h === 'nomor id' || h === 'id karyawan' || h === 'employee id' ||
-        h === 'nik' || h === 'no ktp' || h === 'nomor ktp' ||
-        h === 'no kpj' || h === 'nomor kpj' || h === 'kpj' || h.includes('bpjamsostek');
+        h === 'nik' || h === 'no ktp' || h === 'nomor ktp' || h.includes('ktp') ||
+        h.includes('bpjs kesehatan') || h.includes('no bpjs kesehatan') ||
+        h.includes('bpjamsostek') || h.includes('no kpj') || h.includes('kpj') ||
+        h === 'gaji pokok' || h.includes('basic salary') ||
+        h.includes('handphone') || h.includes('phone') || h === 'hp' || h.includes('no hp') ||
+        h.includes('rekening') || h.includes('nomor rekening') || h.includes('no rekening') ||
+        isAddressHeader(header);
     }
 
     function getProfileDetailIconMeta(header) {
@@ -5228,15 +5394,8 @@
     }
 
     function getDisplayStatus(row) {
-      // Tampilkan status sesuai sumber (WORKER, STAFF, MANAGER, dll).
-      // Jika karyawan sudah keluar, status ditimpa menjadi KELUAR.
+      if (filterHeaders.status) return String(row[filterHeaders.status] || '-').trim() || '-';
       if (isResigned(row)) return 'KELUAR';
-
-      if (filterHeaders.status) {
-        const sourceStatus = String(row[filterHeaders.status] || '').trim();
-        if (sourceStatus) return sourceStatus;
-      }
-
       return 'AKTIF';
     }
 
@@ -5255,9 +5414,14 @@
     }
 
     function getStatusClass(value, row) {
-      // Hanya karyawan yang benar-benar terindikasi keluar yang merah.
-      // Semua status sumber lainnya (WORKER, STAFF, MANAGER, dll) adalah hijau.
-      return isResigned(row) ? 'resign' : 'active';
+      if (isResigned(row)) return 'resign';
+
+      const v = normalizeText(value);
+      if (v.includes('aktif') || v.includes('active') || v.includes('staff') || v.includes('worker') || v.includes('manager') || v.includes('expat') || v.includes('tetap') || v.includes('kontrak') || v.includes('probation')) {
+        return 'active';
+      }
+
+      return '';
     }
 
     function getSectionValue(row) {
@@ -5266,263 +5430,126 @@
       return profile.section || profile.department || '-';
     }
 
-    async function captureProfileCardBlobRobust() {
-      const originalCard = document.getElementById('profileCard');
-      const originalOverlay = document.getElementById('profileOverlay');
-      if (!originalCard || !originalOverlay || !currentProfileRow) {
-        throw new Error('Profil belum tersedia');
-      }
+    async function prepareProfileCardImage() {
+      const card = document.getElementById('profileCard');
+      if (!card || !currentProfileRow) throw new Error('Profil belum tersedia');
 
-      await ensureHtml2Canvas();
+      const profile = currentProfileRow._profile || {};
+      const key = String(profile.id || profile.name || '');
+      if (preparedProfileCardBlob && preparedProfileCardKey === key) return preparedProfileCardBlob;
+      if (preparingProfileCardPromise) return preparingProfileCardPromise;
 
-      // Jangan capture kartu asli. Clone SELURUH overlay agar semua selector CSS
-      // yang bergantung pada .profile-overlay tetap berlaku pada hasil gambar.
-      const wrap = document.createElement('div');
-      wrap.style.cssText = [
-        'position:fixed',
-        'left:-20000px',
-        'top:0',
-        'width:' + Math.max(1, Math.ceil(originalCard.getBoundingClientRect().width || 860)) + 'px',
-        'height:auto',
-        'padding:0',
-        'margin:0',
-        'background:#ffffff',
-        'z-index:2147483647',
-        'display:block',
-        'visibility:visible',
-        'opacity:1',
-        'pointer-events:none',
-        'overflow:visible'
-      ].join(';');
+      preparingProfileCardPromise = (async function () {
+        await ensureHtml2Canvas();
 
-      const overlayClone = originalOverlay.cloneNode(true);
-      overlayClone.removeAttribute('id');
-      overlayClone.style.cssText = [
-        'position:static !important',
-        'display:block !important',
-        'width:100% !important',
-        'height:auto !important',
-        'min-height:0 !important',
-        'padding:0 !important',
-        'margin:0 !important',
-        'background:#ffffff !important',
-        'overflow:visible !important',
-        'visibility:visible !important',
-        'opacity:1 !important'
-      ].join(';');
+        // Foto disiapkan terlebih dahulu agar html2canvas tidak membaca
+        // gambar Google Drive secara langsung (CORS/canvas taint).
+        if (!selectedPhotoDataUrl && selectedPhotoFileId) {
+          const result = await new Promise((resolve, reject) => {
+            google.script.run
+              .withSuccessHandler(resolve)
+              .withFailureHandler(reject)
+              .getEmployeePhotoDataByFileId(selectedPhotoFileId);
+          });
+          if (result && result.found && result.dataUrl) selectedPhotoDataUrl = result.dataUrl;
+        }
 
-      const clonedCard = overlayClone.querySelector('#profileCard');
-      if (!clonedCard) throw new Error('Kartu profil tidak ditemukan');
-      clonedCard.removeAttribute('id');
-      clonedCard.style.setProperty('position', 'relative', 'important');
-      clonedCard.style.setProperty('left', '0', 'important');
-      clonedCard.style.setProperty('top', '0', 'important');
-      clonedCard.style.setProperty('transform', 'none', 'important');
-      clonedCard.style.setProperty('margin', '0', 'important');
-      clonedCard.style.setProperty('max-height', 'none', 'important');
-      clonedCard.style.setProperty('height', 'auto', 'important');
-      clonedCard.style.setProperty('overflow', 'visible', 'important');
-      clonedCard.style.setProperty('box-shadow', 'none', 'important');
-
-      // Jangan ikutkan tombol aksi/copy ke gambar profil.
-      clonedCard.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn, .profile-bpjstk-actions, .bpjstk-view-btn, .cv-view-card-btn').forEach(function(el) {
-        el.style.setProperty('display', 'none', 'important');
-      });
-
-      const clonedBody = clonedCard.querySelector('.profile-body');
-      if (clonedBody) {
-        clonedBody.style.setProperty('overflow', 'visible', 'important');
-        clonedBody.style.setProperty('height', 'auto', 'important');
-        clonedBody.style.setProperty('max-height', 'none', 'important');
-      }
-
-      // Gunakan dataUrl foto yang sudah terbukti bisa dicopy oleh tombol
-      // "Copy Foto Saja". Ini menghilangkan ketergantungan CORS pada Drive.
-      if (selectedPhotoDataUrl) {
-        clonedCard.querySelectorAll('.profile-photo').forEach(function(img) {
-          img.removeAttribute('crossorigin');
-          img.src = selectedPhotoDataUrl;
-          img.style.setProperty('display', 'block', 'important');
-        });
-      }
-
-      // FIX LOGO: jangan biarkan logo perusahaan tetap menunjuk ke
-      // "hoplun.png"/URL eksternal pada clone. Inline menjadi data URL
-      // agar html2canvas pasti menangkap logonya saat hasil dipaste.
-      const clonedCvLogo = clonedCard.querySelector('#cvCompanyLogo') || clonedCard.querySelector('.cv-company-logo');
-      if (clonedCvLogo) {
-        const originalCvLogo = document.getElementById('cvCompanyLogo');
-        const sourceImg = (originalCvLogo && originalCvLogo.querySelector('img')) || clonedCvLogo.querySelector('img');
-
-        if (sourceImg && sourceImg.src) {
-          try {
-            let logoDataUrl = '';
-            if (String(sourceImg.src).indexOf('data:image/') === 0) {
-              logoDataUrl = sourceImg.src;
-            } else {
-              const response = await fetch(sourceImg.src, { cache: 'force-cache' });
-              if (response.ok) {
-                const blob = await response.blob();
-                logoDataUrl = await new Promise(function(resolve, reject) {
-                  const reader = new FileReader();
-                  reader.onloadend = function() { resolve(String(reader.result || '')); };
-                  reader.onerror = reject;
-                  reader.readAsDataURL(blob);
-                });
-              }
+        if (!selectedPhotoDataUrl) {
+          const profileId = String(profile.id || '').trim();
+          if (profileId) {
+            const result = await fetchEmployeePhotoDataCached(profileId);
+            if (result && result.found && result.dataUrl) {
+              selectedPhotoFileId = result.fileId || selectedPhotoFileId;
+              selectedPhotoDataUrl = result.dataUrl;
             }
-
-            if (logoDataUrl) {
-              clonedCvLogo.innerHTML = '';
-              const logoImg = document.createElement('img');
-              logoImg.alt = 'Logo';
-              logoImg.src = logoDataUrl;
-              logoImg.style.width = '100%';
-              logoImg.style.height = '100%';
-              logoImg.style.objectFit = 'cover';
-              clonedCvLogo.appendChild(logoImg);
-              try { await logoImg.decode(); } catch (_) {}
-            }
-          } catch (logoError) {
-            console.warn('Logo profil gagal di-inline:', logoError);
           }
         }
-      }
 
-      // Semua gambar clone ditunggu selesai agar html2canvas tidak menangkap
-      // placeholder/blank image.
-      const clonedImages = Array.from(clonedCard.querySelectorAll('img'));
-      clonedImages.forEach(function(img) {
-        img.removeAttribute('loading');
-        img.removeAttribute('decoding');
-      });
+        const captureWrap = document.createElement('div');
+        captureWrap.style.position = 'fixed';
+        captureWrap.style.left = '-100000px';
+        captureWrap.style.top = '0';
+        captureWrap.style.width = Math.max(card.scrollWidth, card.clientWidth) + 'px';
+        captureWrap.style.background = '#ffffff';
+        captureWrap.style.zIndex = '-1';
+        captureWrap.style.pointerEvents = 'none';
 
-      wrap.appendChild(overlayClone);
-      document.body.appendChild(wrap);
+        const clone = card.cloneNode(true);
+        clone.classList.add('capture-mode');
+        clone.style.width = getComputedStyle(card).width;
+        clone.style.setProperty('max-height', 'none', 'important');
+        clone.style.setProperty('height', 'auto', 'important');
+        clone.style.setProperty('overflow', 'visible', 'important');
+        clone.style.boxShadow = 'none';
+        clone.style.position = 'relative';
+        clone.style.left = '0';
+        clone.style.top = '0';
+        captureWrap.appendChild(clone);
+        document.body.appendChild(captureWrap);
 
-      try {
-        await new Promise(function(resolve) {
-          const images = Array.from(wrap.querySelectorAll('img'));
-          if (!images.length) return resolve();
-          let remaining = images.length;
-          let finished = false;
-          const done = function() {
-            remaining -= 1;
-            if (remaining <= 0 && !finished) {
-              finished = true;
-              resolve();
-            }
-          };
-          images.forEach(function(img) {
-            if (img.complete && (img.naturalWidth || img.src.indexOf('data:') === 0)) done();
-            else {
-              img.addEventListener('load', done, { once:true });
-              img.addEventListener('error', done, { once:true });
-            }
+        if (selectedPhotoDataUrl) {
+          clone.querySelectorAll('.profile-photo').forEach(function (img) {
+            img.removeAttribute('crossorigin');
+            img.src = selectedPhotoDataUrl;
           });
-          setTimeout(function(){ if (!finished) { finished = true; resolve(); } }, 4000);
-        });
-
-        if (document.fonts && document.fonts.ready) {
-          try { await document.fonts.ready; } catch (_) {}
         }
 
-        const cardRect = clonedCard.getBoundingClientRect();
-        const width = Math.max(1, Math.ceil(cardRect.width || originalCard.getBoundingClientRect().width || 860));
-        const height = Math.max(1, Math.ceil(clonedCard.scrollHeight || cardRect.height || 600));
-        const scale = Math.min(2, Math.max(1.5, window.devicePixelRatio || 1.5));
+        const cloneBody = clone.querySelector('.profile-body');
+        if (cloneBody) {
+          cloneBody.style.setProperty('overflow', 'visible', 'important');
+          cloneBody.style.setProperty('height', 'auto', 'important');
+          cloneBody.style.setProperty('max-height', 'none', 'important');
+        }
 
-        const canvas = await html2canvas(clonedCard, {
+        clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn').forEach(function (el) {
+          el.style.display = 'none';
+        });
+
+        // Pastikan semua gambar pada clone selesai dimuat sebelum capture.
+        const images = Array.from(clone.querySelectorAll('img'));
+        await Promise.all(images.map(function (img) {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+          return new Promise(function (resolve) {
+            const done = function () { cleanup(); resolve(); };
+            const cleanup = function () {
+              img.removeEventListener('load', done);
+              img.removeEventListener('error', done);
+            };
+            img.addEventListener('load', done, { once: true });
+            img.addEventListener('error', done, { once: true });
+            setTimeout(done, 5000);
+          });
+        }));
+
+        await new Promise(function (resolve) { setTimeout(resolve, 60); });
+
+        const canvas = await html2canvas(clone, {
           backgroundColor: '#ffffff',
-          scale: scale,
+          scale: Math.min(2, window.devicePixelRatio || 1.5),
           useCORS: true,
           allowTaint: false,
           logging: false,
-          imageTimeout: 15000,
-          removeContainer: true,
-          width: width,
-          height: height,
-          scrollX: 0,
-          scrollY: 0,
-          windowWidth: Math.max(document.documentElement.clientWidth, width + 40),
-          windowHeight: Math.max(document.documentElement.clientHeight, height + 40)
+          imageTimeout: 10000,
+          removeContainer: true
         });
 
-        return await new Promise(function(resolve, reject) {
-          canvas.toBlob(function(blob) {
-            if (blob && blob.size) resolve(blob);
-            else reject(new Error('Gagal membuat PNG profil'));
-          }, 'image/png');
+        captureWrap.remove();
+
+        const blob = await new Promise(function (resolve) {
+          canvas.toBlob(resolve, 'image/png');
         });
-      } finally {
-        if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
-      }
-    }
+        if (!blob || !blob.size) throw new Error('Gagal membuat PNG profil');
 
-    async function prepareProfileCardImage(force) {
-      const profile = (currentProfileRow && currentProfileRow._profile) || {};
-      const key = String(profile.id || profile.name || '');
-      const button = document.getElementById('copyProfileCardBtn');
-
-      if (!force && preparedProfileCardBlob && preparedProfileCardKey === key) return preparedProfileCardBlob;
-      if (preparingProfileCardPromise) return preparingProfileCardPromise;
-      if (!currentProfileRow || !selectedPhotoDataUrl) return null;
-
-      preparingProfileCardPromise = captureProfileCardBlobRobust().then(function(blob){
-        if (!blob || !blob.size) throw new Error('PNG profil kosong');
         preparedProfileCardBlob = blob;
         preparedProfileCardKey = key;
-        if (button) {
-          button.disabled = false;
-          button.innerHTML = '📋';
-          button.title = 'Copy gambar profil';
-        }
         return blob;
-      }).catch(function(err){
-        preparedProfileCardBlob = null;
-        preparedProfileCardKey = '';
-        if (button) {
-          button.disabled = true;
-          button.innerHTML = '📋';
-          button.title = 'Gambar profil belum siap';
-        }
-        throw err;
-      }).finally(function(){
+      })();
+
+      try {
+        return await preparingProfileCardPromise;
+      } finally {
         preparingProfileCardPromise = null;
-      });
-      return preparingProfileCardPromise;
-    }
-
-    function getProfilePhotoDataUrlPromise() {
-      if (selectedPhotoDataUrl && String(selectedPhotoDataUrl).indexOf('data:image/') === 0) {
-        return Promise.resolve(selectedPhotoDataUrl);
       }
-
-      const activeId = String((currentProfileRow && currentProfileRow._profile && currentProfileRow._profile.id) || '').trim();
-      const fileId = String(selectedPhotoFileId || '').trim();
-      const boxImg = document.querySelector('#profilePhotoBox img.profile-photo');
-      const visibleSrc = boxImg ? String(boxImg.currentSrc || boxImg.src || '').trim() : '';
-
-      if (fileId) {
-        return fetchPhotoDataUrlByFileId(fileId).then(function(dataUrl){
-          if (dataUrl && String(dataUrl).indexOf('data:image/') === 0) {
-            selectedPhotoDataUrl = dataUrl;
-            return dataUrl;
-          }
-          if (visibleSrc && visibleSrc.indexOf('data:image/') === 0) {
-            selectedPhotoDataUrl = visibleSrc;
-            return visibleSrc;
-          }
-          throw new Error('Foto belum siap');
-        });
-      }
-
-      if (visibleSrc && visibleSrc.indexOf('data:image/') === 0) {
-        selectedPhotoDataUrl = visibleSrc;
-        return Promise.resolve(visibleSrc);
-      }
-
-      throw new Error('Foto belum siap');
     }
 
     async function copyProfileCardImage() {
@@ -5531,199 +5558,42 @@
         showToast('Profil belum tersedia.', 'error', 'Gagal');
         return false;
       }
+
       if (!window.isSecureContext || !navigator.clipboard || typeof navigator.clipboard.write !== 'function' || !window.ClipboardItem) {
-        showToast('Copy gambar membutuhkan HTTPS dan Clipboard API aktif.', 'error', 'Copy gambar gagal');
+        showToast('Browser tidak mengizinkan copy gambar. Pastikan aplikasi dibuka melalui HTTPS.', 'error', 'Copy gambar gagal');
         return false;
       }
-      if (profileCardCopyBusy) return false;
 
-      const button = document.getElementById('copyProfileCardBtn');
-      const oldHtml = button ? button.innerHTML : '📋';
-      const oldTitle = button ? button.title : 'Copy gambar profil';
-      profileCardCopyBusy = true;
+      const profile = currentProfileRow._profile || {};
+      const key = String(profile.id || profile.name || '');
 
       try {
-        if (button) {
-          button.disabled = true;
-          button.innerHTML = '⏳';
-          button.title = 'Menyalin gambar profil...';
+        // Jalur utama: PNG kartu sudah dibuat sebelum user menekan tombol.
+        // Karena Blob sudah siap, Clipboard.write() tidak perlu menunggu
+        // html2canvas dan jauh lebih stabil di Chrome.
+        let blob = preparedProfileCardBlob && preparedProfileCardKey === key
+          ? preparedProfileCardBlob
+          : null;
+
+        if (!blob) {
+          // Bila persiapan background belum selesai, ClipboardItem menerima
+          // Promise<Blob>. write() tetap dipanggil tanpa await sebelumnya.
+          const blobPromise = prepareProfileCardImage();
+          const item = new ClipboardItem({ 'image/png': blobPromise });
+          const writePromise = navigator.clipboard.write([item]);
+          await writePromise;
+        } else {
+          const item = new ClipboardItem({ 'image/png': blob });
+          const writePromise = navigator.clipboard.write([item]);
+          await writePromise;
         }
 
-        showToast('Menyiapkan gambar profil...', 'success', 'Memproses');
-
-        /*
-         * PENTING: jangan await proses foto/html2canvas sebelum write().
-         * ClipboardItem menerima Promise<Blob>, sehingga permintaan clipboard
-         * dimulai langsung dari event klik dan user-activation tetap terjaga.
-         */
-        const photoPromise = getProfilePhotoDataUrlPromise();
-        const blobPromise = Promise.resolve(photoPromise).then(function(photoDataUrl){
-          return captureProfileCardBlobFast(photoDataUrl);
-        });
-
-        const clipboardItem = new ClipboardItem({ 'image/png': blobPromise });
-        await navigator.clipboard.write([clipboardItem]);
-
-        try {
-          const blob = await blobPromise;
-          if (blob && blob.size) {
-            preparedProfileCardBlob = blob;
-            preparedProfileCardKey = String((currentProfileRow._profile || {}).id || (currentProfileRow._profile || {}).name || '');
-          }
-        } catch (_) {}
-
-        showToast('Gambar profil berhasil disalin ke clipboard. Silakan Paste (Ctrl+V).', 'success', 'Berhasil');
+        showToast('Gambar profil berhasil disalin ke clipboard.', 'success', 'Berhasil');
         return true;
       } catch (error) {
         console.error('copyProfileCardImage:', error);
-        if (String(error && error.message || '').toLowerCase().includes('foto belum siap')) {
-          showToast('Foto profil masih diproses. Tunggu sampai foto tampil lalu klik Copy lagi.', 'error', 'Foto belum siap');
-        } else {
-          showToast('Gagal copy gambar profil. Silakan coba sekali lagi.', 'error', 'Copy gambar gagal');
-        }
+        showToast('Gambar profil gagal dicopy ke clipboard. Pastikan tombol Copy sudah aktif, lalu coba lagi.', 'error', 'Copy gambar gagal');
         return false;
-      } finally {
-        profileCardCopyBusy = false;
-        if (button) {
-          button.disabled = false;
-          button.innerHTML = oldHtml || '📋';
-          button.title = oldTitle || 'Copy gambar profil';
-        }
-      }
-    }
-
-    async function inlineProfileLogoForCapture(clonedCard) {
-      const clonedCvLogo = clonedCard.querySelector('.cv-company-logo');
-      if (!clonedCvLogo) return;
-
-      // FIX FINAL LOGO: gunakan logo yang sudah tertanam di HTML terlebih dahulu.
-      const embedded = String(EMBEDDED_PROFILE_LOGO_DATA_URL || '').trim();
-      if (embedded.indexOf('data:image/') === 0) {
-        clonedCvLogo.innerHTML = '<img alt="Logo">';
-        const img = clonedCvLogo.querySelector('img');
-        img.src = embedded;
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
-        try { if (img.decode) await img.decode(); } catch (_) {}
-        return;
-      }
-
-      // Fallback ke logo data URL yang sedang dipakai aplikasi.
-      const originalCvLogo = document.getElementById('cvCompanyLogo');
-      const originalImg = originalCvLogo ? originalCvLogo.querySelector('img') : null;
-      const candidates = [];
-      if (originalImg) {
-        const src = String(originalImg.currentSrc || originalImg.src || '').trim();
-        if (src) candidates.push(src);
-      }
-      const configured = String((defaultConfig && defaultConfig.logoDataUrl) || '').trim();
-      if (configured) candidates.push(configured);
-
-      for (const candidate of candidates) {
-        if (candidate.indexOf('data:image/') !== 0) continue;
-        clonedCvLogo.innerHTML = '<img alt="Logo">';
-        const img = clonedCvLogo.querySelector('img');
-        img.src = candidate;
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
-        try { if (img.decode) await img.decode(); } catch (_) {}
-        return;
-      }
-
-      clonedCvLogo.innerHTML = '<div style="width:100%;height:100%;display:grid;place-items:center;font-weight:900;color:#111827;background:#fff;border:1px solid #111827;">HL</div>';
-    }
-
-    async function captureProfileCardBlobFast(photoDataUrl) {
-      const originalCard = document.getElementById('profileCard');
-      const originalOverlay = document.getElementById('profileOverlay');
-      if (!originalCard || !originalOverlay || !currentProfileRow) throw new Error('Profil belum tersedia');
-      const photoSrc = String(photoDataUrl || selectedPhotoDataUrl || '').trim();
-      if (!photoSrc || photoSrc.indexOf('data:image/') !== 0) throw new Error('Foto belum siap');
-      await ensureHtml2Canvas();
-
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'position:fixed;left:-30000px;top:0;width:' + Math.max(1, Math.ceil(originalCard.getBoundingClientRect().width || 860)) + 'px;padding:0;margin:0;background:#fff;z-index:2147483647;display:block;visibility:visible;opacity:1;overflow:visible;pointer-events:none;';
-
-      const overlayClone = originalOverlay.cloneNode(true);
-      overlayClone.removeAttribute('id');
-      overlayClone.style.cssText = 'position:static !important;display:block !important;width:100% !important;height:auto !important;min-height:0 !important;padding:0 !important;margin:0 !important;background:#fff !important;overflow:visible !important;visibility:visible !important;opacity:1 !important;';
-
-      const clonedCard = overlayClone.querySelector('#profileCard');
-      if (!clonedCard) throw new Error('Kartu profil tidak ditemukan');
-      clonedCard.removeAttribute('id');
-      clonedCard.style.setProperty('position','relative','important');
-      clonedCard.style.setProperty('left','0','important');
-      clonedCard.style.setProperty('top','0','important');
-      clonedCard.style.setProperty('transform','none','important');
-      clonedCard.style.setProperty('margin','0','important');
-      clonedCard.style.setProperty('max-height','none','important');
-      clonedCard.style.setProperty('height','auto','important');
-      clonedCard.style.setProperty('overflow','visible','important');
-      clonedCard.style.setProperty('box-shadow','none','important');
-
-      clonedCard.querySelectorAll('.profile-actions,.photo-action,.copy-mini-btn,.profile-bpjstk-actions,.bpjstk-view-btn,.cv-view-card-btn').forEach(function(el){ el.style.setProperty('display','none','important'); });
-      const clonedBody = clonedCard.querySelector('.profile-body');
-      if (clonedBody) {
-        clonedBody.style.setProperty('overflow','visible','important');
-        clonedBody.style.setProperty('height','auto','important');
-        clonedBody.style.setProperty('max-height','none','important');
-      }
-
-      clonedCard.querySelectorAll('.profile-photo').forEach(function(img){
-        img.removeAttribute('crossorigin');
-        img.removeAttribute('loading');
-        img.removeAttribute('decoding');
-        img.src = photoSrc;
-        img.style.setProperty('display','block','important');
-      });
-
-      clonedCard.querySelectorAll('img').forEach(function(img){
-        if (img.classList.contains('profile-photo')) return;
-        if (img.closest('.cv-company-logo')) return;
-        const src = String(img.src || '');
-        if (src && !src.startsWith('data:')) img.style.setProperty('display','none','important');
-      });
-
-      await inlineProfileLogoForCapture(clonedCard);
-
-      wrap.appendChild(overlayClone);
-      document.body.appendChild(wrap);
-      try {
-        const images = Array.from(clonedCard.querySelectorAll('img'));
-        await Promise.all(images.map(function(img){
-          if (img.complete && (img.naturalWidth || String(img.src).indexOf('data:') === 0)) return Promise.resolve();
-          return new Promise(function(resolve){
-            let done = false;
-            const finish = function(){ if(done) return; done=true; resolve(); };
-            img.addEventListener('load', finish, {once:true});
-            img.addEventListener('error', finish, {once:true});
-            setTimeout(finish, 2500);
-          });
-        }));
-
-        const cardRect = clonedCard.getBoundingClientRect();
-        const width = Math.max(1, Math.ceil(cardRect.width || 860));
-        const height = Math.max(1, Math.ceil(clonedCard.scrollHeight || cardRect.height || 600));
-        const canvas = await html2canvas(clonedCard, {
-          backgroundColor:'#ffffff',
-          scale: Math.min(2, Math.max(1.25, window.devicePixelRatio || 1.25)),
-          useCORS:true,
-          allowTaint:false,
-          logging:false,
-          imageTimeout:2500,
-          removeContainer:true,
-          width:width,
-          height:height,
-          scrollX:0,
-          scrollY:0,
-          windowWidth:Math.max(document.documentElement.clientWidth, width + 40),
-          windowHeight:Math.max(document.documentElement.clientHeight, height + 40)
-        });
-        return await new Promise(function(resolve,reject){
-          canvas.toBlob(function(blob){
-            if (blob && blob.size) resolve(blob); else reject(new Error('Gagal membuat PNG profil'));
-          },'image/png');
-        });
-      } finally {
-        if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
       }
     }
 
@@ -5774,12 +5644,16 @@
       const noId = profile.id && profile.id !== '-'
         ? String(profile.id).trim()
         : getQuickCopyValue(['nomor id', 'no id', 'id karyawan', 'employee id']);
+      const noHp = getQuickCopyValue(['no hp', 'handphone', 'phone', 'mobile', 'no handphone']);
+      const noRekening = getQuickCopyValue(['nomor rekening', 'no rekening', 'rekening', 'bank account']);
       const noKpj = getQuickCopyValue(['no bpjamsostek', 'bpjamsostek', 'no kpj', 'nomor kpj', 'kpj']);
       const nik = getQuickCopyValue(['no ktp', 'nik', 'nomor ktp']);
 
       const copyValue = [
         'Nama : ' + nama,
-        'No ID : ' + noId,
+        'No.ID : ' + noId,
+        'No Handphone : ' + noHp,
+        'No Rekening : ' + noRekening,
         'No KPJ : ' + noKpj,
         'NIK : ' + nik
       ].join('\n');
@@ -5978,6 +5852,10 @@
       document.getElementById('profileOverlay').classList.remove('active');
       selectedPhotoFileId = '';
       selectedPhotoDataUrl = '';
+      preparedProfileCardBlob = null;
+      preparedProfileCardKey = '';
+      preparingProfileCardPromise = null;
+      setProfileCardCopyReady(false);
       hideProfileBpjstkCard();
       currentProfileRow = null;
 
@@ -6221,8 +6099,8 @@
 
         birthdayRows.push({
           index: index,
-          noId: profile.id || '-',
-          nama: profile.name || '-',
+          noId: profile.id || getRowValueByAliases(row, ['nomor id','no id','id karyawan','employee id']) || '-',
+          nama: profile.name || getRowValueByAliases(row, ['nama','nama karyawan','employee name']) || '-',
           section: getSectionValue(row),
           tglLahir: birthText || '-',
           usia: profile.age || '-',
@@ -8108,8 +7986,8 @@
 
         retirementRows.push({
           index: index,
-          noId: profile.id || '-',
-          nama: profile.name || '-',
+          noId: profile.id || getRowValueByAliases(row, ['nomor id','no id','id karyawan','employee id']) || '-',
+          nama: profile.name || getRowValueByAliases(row, ['nama','nama karyawan','employee name']) || '-',
           section: getSectionValue(row),
           tglLahir: birthText || formatClientDateId(birthDate),
           usiaSaatIni: String(ageNow),
