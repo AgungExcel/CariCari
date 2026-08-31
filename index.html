@@ -2965,6 +2965,8 @@
 
 <style id="profile-modern-bpjstk-patch">
   /* Revisi profil: icon detail modern, copy alamat, dan preview Kartu BPJSTK di profil */
+  .cv-value .status-badge { display:inline-flex; vertical-align:middle; margin:0; }
+  .cv-row .cv-status { min-height: 28px; }
   .idcard-overlay.active {
     z-index: 190;
   }
@@ -3380,6 +3382,7 @@
     grid-template-columns: 145px 10px minmax(0, 1fr) !important;
   }
 </style>
+<style id="database-update-v7">.database-update-panel{margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb}.database-update-panel .icon-btn{min-width:48px}#databaseUpdateStatus{word-break:break-word}</style>
 </head>
 
 <body>
@@ -3567,6 +3570,18 @@
         <div class="form-help" style="margin-top:8px">
           Database karyawan: <b>Supabase</b>. Foto karyawan masih berasal dari <b>Google Apps Script/Google Drive</b>.
         </div>
+      </div>
+
+      <div class="form-group database-update-panel">
+        <label class="form-label">🔄 Update Database Karyawan</label>
+        <div class="form-help">Pilih Excel database terbaru. Database lama akan dikosongkan terlebih dahulu, lalu data baru dimasukkan ke Supabase.</div>
+        <input type="file" class="form-input" id="databaseUpdateFile" accept=".xlsx,.xls">
+        <div id="databaseUpdateFileInfo" class="form-help" style="margin-top:6px">Belum memilih file.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">
+          <button type="button" class="icon-btn danger" id="databaseReplaceBtn" onclick="replaceDatabaseFromExcel()" disabled title="Kosongkan dan import database baru">🗑️🔄</button>
+        </div>
+        <div id="databaseUpdateStatus" class="photo-index-status" style="margin-top:8px">Status: siap.</div>
+        <div class="form-help" style="margin-top:6px;color:#b42318"><b>Perhatian:</b> gunakan hanya jika Anda memang ingin mengganti seluruh database karyawan.</div>
       </div>
 
       <div class="modal-actions">
@@ -3853,6 +3868,13 @@
         if (value === null || value === undefined) value = '';
         out[CARICARI_SUPABASE_HEADERS[i]] = value;
       });
+      const salaryAliases = ['gaji_pokok', 'basic_salary', 'salary'];
+      for (const key of salaryAliases) {
+        if (row && row[key] !== null && row[key] !== undefined && String(row[key]).trim() !== '') {
+          out['GAJI POKOK'] = row[key];
+          break;
+        }
+      }
       return out;
     }
 
@@ -3885,6 +3907,16 @@
       const department = String(getRowValueByAliases(row, ['departemen', 'department', 'dept', 'bagian', 'divisi', 'division']) || '').trim();
       const joinDate = getRowValueByAliases(row, ['join date', 'tanggal masuk', 'tgl masuk', 'joindate']);
       const birthDate = getRowValueByAliases(row, ['tanggal lahir', 'tgl lahir', 'dob', 'birth date']);
+      const statusRaw = getRowValueByAliases(row, ['status']);
+
+      // Gaji Pokok mengikuti aturan payroll yang ditetapkan:
+      // Khusus STATUS = WORKER:
+      //   jika masa kerja <= 5 tahun: 2.940.088 + (10.000 x tahun)
+      //   jika masa kerja > 5 tahun : 2.990.088
+      // Selain WORKER: kosong.
+      // Masa kerja yang dipakai adalah jumlah tahun penuh (completed years).
+      let basicSalary = '';
+      let workYears = null;
 
       let age = '-';
       let workPeriod = '-';
@@ -3892,11 +3924,11 @@
         const birth = parseClientDate(birthDate);
         if (birth) {
           const calculatedAge = calculateAgeAtDate(birth, new Date());
-          if (Number.isFinite(calculatedAge)) age = String(calculatedAge);
+          if (Number.isFinite(calculatedAge)) age = calculatedAge + ' tahun';
         }
       } catch (_) {}
       try {
-        const join = parseClientDate(joinDate);
+        const join = parseGeneralClientDate(joinDate);
         if (join) {
           const today = getStartOfDay(new Date());
           let years = today.getFullYear() - join.getFullYear();
@@ -3904,9 +3936,16 @@
           if (today.getDate() < join.getDate()) months--;
           if (months < 0) { years--; months += 12; }
           if (years < 0) { years = 0; months = 0; }
-          workPeriod = years + ' Tahun ' + months + ' Bulan';
+          workYears = years;
+          workPeriod = years + ' tahun ' + months + ' bulan';
         }
       } catch (_) {}
+
+      if (normalizeText(statusRaw) === 'worker' && Number.isFinite(workYears)) {
+        basicSalary = workYears <= 5
+          ? (2940088 + (10000 * workYears))
+          : 2990088;
+      }
 
       row._profile = {
         id: id || '-',
@@ -3916,7 +3955,8 @@
         position: position || '-',
         department: department || section || '-',
         age: age,
-        workPeriod: workPeriod
+        workPeriod: workPeriod,
+        basicSalary: basicSalary ? String(basicSalary).trim() : ''
       };
 
       return row;
@@ -3949,9 +3989,10 @@
         throw new Error('Supabase terhubung, tetapi query mengembalikan 0 data. Periksa policy SELECT/RLS pada public.employees.');
       }
 
+      const hasSalary = raw.some(function(r){ return r && ['gaji_pokok','basic_salary','salary'].some(function(k){ return Object.prototype.hasOwnProperty.call(r,k); }); });
       return {
-        headers: CARICARI_SUPABASE_HEADERS.slice(),
-        rows: raw.map(caricariSupabaseRowToAppRow)
+        headers: CARICARI_SUPABASE_HEADERS.slice().concat(hasSalary ? ['GAJI POKOK'] : []),
+        rows: raw.map(function(row){ return enrichSupabaseRowProfile(caricariSupabaseRowToAppRow(row)); })
       };
     }
 
@@ -3978,7 +4019,7 @@
     let loadProgressValue = 0;
     let photoCache = {};
     const PHOTO_CACHE_LIMIT = 120;
-    const SHEET_DATA_CACHE_KEY = 'CARICARI_SUPABASE_DATA_CACHE_V2';
+    const SHEET_DATA_CACHE_KEY = 'CARICARI_SUPABASE_DATA_CACHE_V9';
     const SHEET_DATA_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const LOAD_SLOW_NOTICE_MS = 9000;
 
@@ -4209,6 +4250,7 @@
     window.CARICARI_LOCAL_SUPABASE_MODE = true;
 
     document.addEventListener('DOMContentLoaded', function () {
+      initDatabaseUpdateControl();
       loadConfig();
       reloadData({forceFresh: true});
 
@@ -4369,6 +4411,14 @@
       document.getElementById('settingAppTitle').value = defaultConfig.appTitle || '';
       document.getElementById('settingProfileLayout').value = getDefaultProfileLayout();
       document.getElementById('settingLogoFile').value = '';
+      const dbFile = document.getElementById('databaseUpdateFile');
+      if (dbFile) dbFile.value = '';
+      const dbInfo = document.getElementById('databaseUpdateFileInfo');
+      if (dbInfo) dbInfo.textContent = 'Belum memilih file.';
+      const dbBtn = document.getElementById('databaseReplaceBtn');
+      if (dbBtn) dbBtn.disabled = true;
+      const dbStatus = document.getElementById('databaseUpdateStatus');
+      if (dbStatus) dbStatus.textContent = 'Status: siap.';
 
       refreshSettingsPreview();
 
@@ -4489,6 +4539,82 @@
         })
         .rebuildPhotoIndexManual();
     }
+
+    // ===== UPDATE DATABASE DARI EXCEL (REPLACE TOTAL) =====
+    const DATABASE_UPDATE_MAP = {
+      'NOMOR ID':'nomor_id','NAMA':'nama','SECTION':'section','JOIN DATE':'join_date',
+      'NO KTP':'no_ktp','NO HP':'no_hp','NO BPJS KESEHATAN':'no_bpjs_kesehatan',
+      'NO BPJAMSOSTEK ( NO KPJ )':'no_bpjamsostek','TEMPAT LAHIR':'tempat_lahir',
+      'TANGGAL LAHIR':'tanggal_lahir','ALAMAT':'alamat','NOMOR REKENING':'nomor_rekening',
+      'STATUS':'status','CABANG':'cabang','TANGGAL KELUAR':'tanggal_keluar',
+      'ALASAN KELUAR':'alasan_keluar','FASKES 1':'faskes_1','FASKES GIGI':'faskes_gigi',
+      'JENIS KELAMIN':'jenis_kelamin','POSISI':'posisi','DEPARTEMEN':'departemen',
+      'STATUS PERKAWINAN':'status_perkawinan','GAJI POKOK':'gaji_pokok',
+      'BASIC SALARY':'gaji_pokok','SALARY':'gaji_pokok'
+    };
+    function normalizeDatabaseUpdateHeader(value) { return String(value == null ? '' : value).replace(/^\uFEFF/,'').replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim().toUpperCase(); }
+    function databaseUpdateCellValue(value) {
+      if (value === undefined || value === null || value === '') return null;
+      if (value instanceof Date && !isNaN(value.getTime())) return value.getFullYear()+'-'+String(value.getMonth()+1).padStart(2,'0')+'-'+String(value.getDate()).padStart(2,'0');
+      return String(value).trim() || null;
+    }
+    function databaseUpdateExcelSerialToDate(serial) {
+      const n=Number(serial); if(!Number.isFinite(n)||n<1)return null;
+      const d=new Date(1899,11,30); d.setDate(d.getDate()+n);
+      return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    }
+    function prepareDatabaseUpdateRows(sheetRows) {
+      if(!Array.isArray(sheetRows)||sheetRows.length<2) throw new Error('File Excel tidak berisi data.');
+      const mapped=(sheetRows[0]||[]).map(h=>DATABASE_UPDATE_MAP[normalizeDatabaseUpdateHeader(h)]||'');
+      const required=['NOMOR ID','NAMA','SECTION','JOIN DATE','TANGGAL LAHIR','STATUS'];
+      const missing=required.filter(h=>!mapped.includes(DATABASE_UPDATE_MAP[h]));
+      if(missing.length) throw new Error('Header wajib tidak ditemukan: '+missing.join(', '));
+      const rows=[];
+      for(let r=1;r<sheetRows.length;r++){
+        const src=sheetRows[r]||[], obj={};
+        mapped.forEach((col,c)=>{ if(!col)return; let v=databaseUpdateCellValue(src[c]); if(['join_date','tanggal_lahir','tanggal_keluar'].includes(col)&&typeof v==='string'&&/^\d+(\.\d+)?$/.test(v))v=databaseUpdateExcelSerialToDate(v); obj[col]=v; });
+        if(!String(obj.nomor_id||'').trim()&&!String(obj.nama||'').trim())continue;
+        rows.push(obj);
+      }
+      if(!rows.length)throw new Error('Tidak ada baris karyawan yang valid.');
+      return rows;
+    }
+    function updateDatabaseFileSelected(){
+      const input=document.getElementById('databaseUpdateFile'),btn=document.getElementById('databaseReplaceBtn'),info=document.getElementById('databaseUpdateFileInfo');
+      if(!input||!btn||!info)return; const file=input.files&&input.files[0];
+      if(!file){info.textContent='Belum memilih file.';btn.disabled=true;return;}
+      info.textContent='File: '+file.name+' ('+Math.round(file.size/1024)+' KB)'; btn.disabled=false;
+    }
+    async function replaceDatabaseFromExcel(){
+      const input=document.getElementById('databaseUpdateFile'),btn=document.getElementById('databaseReplaceBtn'),status=document.getElementById('databaseUpdateStatus');
+      if(!input||!input.files||!input.files[0])return;
+      const confirmed=await askModernConfirm({title:'Ganti Database Karyawan?',message:'Database Supabase saat ini akan dikosongkan, kemudian diganti dengan isi file Excel yang dipilih. Lanjutkan?',confirmText:'Ya, Ganti Database',cancelText:'Batal'});
+      if(!confirmed)return;
+      btn.disabled=true; status.textContent='Status: membaca Excel...';
+      try{
+        await ensureXLSX();
+        const wb=XLSX.read(await input.files[0].arrayBuffer(),{type:'array',cellDates:true});
+        const sheetName=wb.SheetNames[0]; if(!sheetName)throw new Error('Sheet Excel tidak ditemukan.');
+        const rows=prepareDatabaseUpdateRows(XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:null,raw:true}));
+        status.textContent='Status: '+rows.length.toLocaleString('id-ID')+' data siap. Mengganti database...';
+        const batchSize=350; let inserted=0;
+        for(let i=0;i<rows.length;i+=batchSize){
+          const batch=rows.slice(i,i+batchSize);
+          const {data,error}=await caricariSupabase.rpc('replace_employees_batch',{p_rows:batch,p_reset:i===0});
+          if(error)throw new Error('Batch '+(Math.floor(i/batchSize)+1)+' gagal: '+error.message);
+          inserted+=Number(data&&data.inserted||batch.length);
+          status.textContent='Status: '+inserted.toLocaleString('id-ID')+' / '+rows.length.toLocaleString('id-ID')+' data masuk...';
+        }
+        try{localStorage.removeItem(SHEET_DATA_CACHE_KEY);}catch(_){ }
+        await reloadData({forceFresh:true,silentToast:true});
+        status.textContent='Status: selesai. '+inserted.toLocaleString('id-ID')+' data berhasil diperbarui.';
+        showToast('Database berhasil diganti dengan data Excel baru.','success','Update Database');
+      }catch(error){
+        console.error('replaceDatabaseFromExcel:',error); status.textContent='Status: GAGAL — '+(error&&error.message?error.message:String(error));
+        showToast(error&&error.message?error.message:'Update database gagal.','error','Update Database');
+      }finally{btn.disabled=false;}
+    }
+    function initDatabaseUpdateControl(){ const input=document.getElementById('databaseUpdateFile'); if(input)input.addEventListener('change',updateDatabaseFileSelected); }
 
     function saveSettings() {
       const appTitle = document.getElementById('settingAppTitle').value.trim();
@@ -4925,7 +5051,8 @@
       rowsToRender.forEach(function (row, index) {
         html += '<tr onclick="openProfile(' + index + ')">';
         mainTableHeaders.forEach(function (header) {
-          html += '<td title="' + escapeHtml(String(row[header] == null ? '' : row[header])) + '">' + renderTableCell(row, header, keyword) + '</td>';
+          const cellValue = isDisplayDateHeader(header) ? formatClientDateId(row[header]) : String(row[header] == null ? '' : row[header]);
+          html += '<td title="' + escapeHtml(cellValue) + '">' + renderTableCell(row, header, keyword) + '</td>';
         });
         html += '</tr>';
       });
@@ -4939,14 +5066,33 @@
       container.innerHTML = html;
     }
 
+    function isDisplayDateHeader(header) {
+      const h = normalizeText(header);
+      return h === 'join date' || h === 'joindate' || h === 'tanggal masuk' || h === 'tgl masuk' ||
+             h === 'tanggal lahir' || h === 'tgl lahir' || h === 'dob' ||
+             h === 'tanggal keluar' || h === 'tgl keluar' || h === 'exit date';
+    }
+
     function renderTableCell(row, header, keyword) {
-      const value = row[header] == null ? '' : String(row[header]);
+      let value = row[header] == null ? '' : String(row[header]);
 
       if (filterHeaders.status && header === filterHeaders.status) {
         return renderStatusBadge(value, row);
       }
 
+      if (isDisplayDateHeader(header)) {
+        value = formatClientDateId(row[header]);
+      }
+
       return highlightText(value, keyword);
+    }
+
+    function formatBasicSalary(value) {
+      const text = String(value == null ? '' : value).trim();
+      if (!text || text === '-') return '-';
+      const numeric = Number(text.replace(/[^0-9.-]/g, ''));
+      if (Number.isFinite(numeric) && numeric > 0 && !/[A-Za-z]/.test(text)) return 'Rp ' + Math.round(numeric).toLocaleString('id-ID');
+      return text;
     }
 
     function openProfile(index) {
@@ -5176,11 +5322,13 @@
             ${canViewKartu ? `<button type="button" class="cv-view-card-btn" title="Lihat Kartu BPJSTK" onclick="showProfileBpjstkCard(event)">🪪 Lihat Kartu</button>` : ''}
           </span>` : '';
 
+        const isStatusRow = normalizeText(label) === 'status';
+        const displayHtml = isStatusRow ? renderStatusBadge(cleanValue, row) : `<span class="cv-text">${escapeHtml(cleanValue)}</span>`;
         return `
           <div class="cv-row">
             <div class="cv-label">${escapeHtml(label)}</div>
             <div class="cv-separator">:</div>
-            <div class="cv-value ${extraClass || ''}"><span class="cv-text">${escapeHtml(cleanValue)}</span>${actionHtml}</div>
+            <div class="cv-value ${extraClass || ''}">${displayHtml}${actionHtml}</div>
           </div>
         `;
       }
@@ -5195,8 +5343,8 @@
       const status = getDisplayStatus(row);
 
       const tempatLahir = find(['tempat lahir', 'birth place']);
-      const tanggalLahir = find(['tanggal lahir', 'tgl lahir', 'dob']);
-      const joinDate = find(['join date', 'joindate', 'tanggal masuk', 'tgl masuk']);
+      const tanggalLahir = formatClientDateId(find(['tanggal lahir', 'tgl lahir', 'dob']));
+      const joinDate = formatClientDateId(find(['join date', 'joindate', 'tanggal masuk', 'tgl masuk']));
       const jenisKelamin = find(['jenis kelamin', 'gender', 'sex', 'jk', 'kelamin']);
       const noHp = find(['no hp', 'hp', 'handphone', 'phone']);
       const alamat = find(['alamat', 'address']);
@@ -5204,7 +5352,9 @@
       const bpjsKes = find(['no bpjs kesehatan', 'bpjs kesehatan']);
       const kpj = find(['no bpjamsostek', 'bpjamsostek', 'no kpj', 'kpj']);
       const rekening = find(['nomor rekening', 'no rekening', 'rekening']);
-      const gajiPokok = profile.basicSalary || find(['gaji pokok', 'basic salary']);
+      const tanggalKeluar = formatClientDateId(find(['tanggal keluar', 'tgl keluar', 'exit date']));
+      const alasanKeluar = find(['alasan keluar', 'reason exit', 'exit reason']);
+      const gajiPokok = formatBasicSalary(profile.basicSalary || find(['gaji pokok', 'basic salary', 'basic_salary', 'salary']));
 
       let html = '';
 
@@ -5217,13 +5367,15 @@
       html += rowLine('Posisi', posisi);
       html += rowLine('Cabang', cabang);
       html += rowLine('Jenis Kelamin', jenisKelamin);
-      html += rowLine('Tempat, Tanggal Lahir', `${tempatLahir}, ${tanggalLahir}`);
+      html += rowLine('Tempat, Tanggal Lahir', [tempatLahir, tanggalLahir !== '-' ? tanggalLahir : ''].filter(Boolean).join(', ') || '-');
       html += rowLine('Join Date', joinDate);
       html += rowLine('Usia', profile.age || '-');
       html += rowLine('Masa Kerja', profile.workPeriod || '-');
       html += rowLine('Gaji Pokok', gajiPokok, '', true);
       html += rowLine('Handphone', noHp, '', true);
       html += rowLine('Status', status, 'cv-status');
+      html += rowLine('Tanggal Keluar', tanggalKeluar);
+      html += rowLine('Alasan Keluar', alasanKeluar);
       html += rowLine('Alamat', alamat, '', true);
       html += `</div>`;
 
@@ -5631,33 +5783,14 @@
     }
 
     function copyProfileQuickData(event) {
-      if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-
+      if (event) { event.preventDefault(); event.stopPropagation(); }
       const row = currentProfileRow || {};
       const profile = row._profile || {};
-      const nama = profile.name && profile.name !== '-'
-        ? String(profile.name).trim()
-        : getQuickCopyValue(['nama', 'nama karyawan', 'employee name']);
-      const noId = profile.id && profile.id !== '-'
-        ? String(profile.id).trim()
-        : getQuickCopyValue(['nomor id', 'no id', 'id karyawan', 'employee id']);
-      const noHp = getQuickCopyValue(['no hp', 'handphone', 'phone', 'mobile', 'no handphone']);
-      const noRekening = getQuickCopyValue(['nomor rekening', 'no rekening', 'rekening', 'bank account']);
-      const noKpj = getQuickCopyValue(['no bpjamsostek', 'bpjamsostek', 'no kpj', 'nomor kpj', 'kpj']);
-      const nik = getQuickCopyValue(['no ktp', 'nik', 'nomor ktp']);
-
-      const copyValue = [
-        'Nama : ' + nama,
-        'No.ID : ' + noId,
-        'No Handphone : ' + noHp,
-        'No Rekening : ' + noRekening,
-        'No KPJ : ' + noKpj,
-        'NIK : ' + nik
-      ].join('\n');
-
+      const nama = profile.name && profile.name !== '-' ? String(profile.name).trim() : getQuickCopyValue(['nama','nama karyawan','employee name']);
+      const noId = profile.id && profile.id !== '-' ? String(profile.id).trim() : getQuickCopyValue(['nomor id','no id','id karyawan','employee id']);
+      const noKpj = getQuickCopyValue(['no bpjamsostek','bpjamsostek','no kpj','nomor kpj','kpj']);
+      const nik = getQuickCopyValue(['no ktp','nik','nomor ktp']);
+      const copyValue = ['Nama : ' + nama, 'No ID : ' + noId, 'No KPJ : ' + noKpj, 'NIK : ' + nik].join('\n');
       copyText(copyValue, 'Data personal');
     }
 
@@ -6102,7 +6235,7 @@
           noId: profile.id || getRowValueByAliases(row, ['nomor id','no id','id karyawan','employee id']) || '-',
           nama: profile.name || getRowValueByAliases(row, ['nama','nama karyawan','employee name']) || '-',
           section: getSectionValue(row),
-          tglLahir: birthText || '-',
+          tglLahir: formatClientDateId(date),
           usia: profile.age || '-',
           masaKerja: profile.workPeriod || '-',
           status: getDisplayStatus(row),
@@ -6433,7 +6566,7 @@
           section: getSectionValue(row),
           cabang: (profile.branch || (filterHeaders.branch ? row[filterHeaders.branch] : '') || '-'),
           status: getDisplayStatus(row),
-          tglLahir: birthText || '-',
+          tglLahir: formatClientDateId(date),
           age: ageNow,
           usiaSaatIni: ageNow + ' tahun',
           genderKey: genderInfo.key,
@@ -7989,8 +8122,8 @@
           noId: profile.id || getRowValueByAliases(row, ['nomor id','no id','id karyawan','employee id']) || '-',
           nama: profile.name || getRowValueByAliases(row, ['nama','nama karyawan','employee name']) || '-',
           section: getSectionValue(row),
-          tglLahir: birthText || formatClientDateId(birthDate),
-          usiaSaatIni: String(ageNow),
+          tglLahir: formatClientDateId(birthDate),
+          usiaSaatIni: ageNow + ' tahun',
           jenisKelamin: genderInfo.label,
           genderKey: genderInfo.key,
           usiaPensiun: String(retirementInfo.age),
@@ -8282,12 +8415,84 @@
       return `${year}-${month}-${day}`;
     }
 
+    function parseGeneralClientDate(value) {
+      if (value instanceof Date && !isNaN(value.getTime())) return getStartOfDay(value);
+
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const excelEpoch = new Date(1899, 11, 30);
+        const excelDate = new Date(excelEpoch.getTime() + value * 86400000);
+        return isNaN(excelDate.getTime()) ? null : getStartOfDay(excelDate);
+      }
+
+      const text = String(value == null ? '' : value).trim();
+      if (!text || text === '-') return null;
+
+      const months = {
+        jan: 0, januari: 0, january: 0,
+        feb: 1, februari: 1, february: 1,
+        mar: 2, maret: 2, march: 2,
+        apr: 3, april: 3,
+        may: 4, mei: 4,
+        jun: 5, juni: 5, june: 5,
+        jul: 6, juli: 6, july: 6,
+        aug: 7, agu: 7, ags: 7, agustus: 7, august: 7,
+        sep: 8, sept: 8, september: 8,
+        oct: 9, okt: 9, oktober: 9, october: 9,
+        nov: 10, november: 10,
+        dec: 11, des: 11, desember: 11, december: 11
+      };
+
+      function normalizeYear(yearValue) {
+        let year = Number(yearValue);
+        if (!Number.isFinite(year)) return null;
+        if (year < 100) year = year >= 30 ? 1900 + year : 2000 + year;
+        return year;
+      }
+
+      function makeDate(yearValue, monthValue, dayValue) {
+        const year = normalizeYear(yearValue);
+        const month = Number(monthValue);
+        const day = Number(dayValue);
+        if (year == null || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+        const date = new Date(year, month, day);
+        if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+        return getStartOfDay(date);
+      }
+
+      // ISO dari Supabase: YYYY-MM-DD atau YYYY-MM-DDTHH:mm:ss...
+      let match = text.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:T|\s|$)/);
+      if (match) {
+        const date = makeDate(match[1], Number(match[2]) - 1, match[3]);
+        if (date) return date;
+      }
+
+      // dd-MMM-yyyy / dd MMM yyyy
+      match = text.match(/^(\d{1,2})[-\s\/.]([A-Za-z]+)[-\s\/.](\d{2,4})$/);
+      if (match) {
+        const month = months[match[2].toLowerCase()];
+        if (month != null) {
+          const date = makeDate(match[3], month, match[1]);
+          if (date) return date;
+        }
+      }
+
+      // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy
+      match = text.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+      if (match) {
+        const date = makeDate(match[3], Number(match[2]) - 1, match[1]);
+        if (date) return date;
+      }
+
+      const fallback = new Date(text);
+      return isNaN(fallback.getTime()) ? null : getStartOfDay(fallback);
+    }
+
     function formatClientDateId(dateValue) {
-      const date = new Date(dateValue);
-      if (isNaN(date.getTime())) return '-';
-      return String(date.getDate()).padStart(2, '0') + '/' +
-        String(date.getMonth() + 1).padStart(2, '0') + '/' +
-        date.getFullYear();
+      const date = parseGeneralClientDate(dateValue);
+      if (!date) return '-';
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return String(date.getDate()).padStart(2, '0') + '-' +
+        monthNames[date.getMonth()] + '-' + date.getFullYear();
     }
 
     function getRetirementCountdown(dateValue) {
