@@ -696,6 +696,11 @@
 
     .status-badge.active { background: var(--green-bg); border-color: var(--green-line); color: var(--green); }
     .status-badge.resign { background: var(--red-bg); border-color: var(--red-line); color: var(--red); }
+    .status-badge.marital-married { background: var(--green-bg); border-color: var(--green-line); color: var(--green); }
+    .status-badge.marital-single { background: var(--accent-soft); border-color: #bfdbfe; color: #1d4ed8; }
+    .status-badge.marital-widowed { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber); }
+    .status-badge.marital-divorced { background: var(--red-bg); border-color: var(--red-line); color: var(--red); }
+    .status-badge.marital-default { background: #f3f4f6; border-color: var(--line); color: #374151; }
 
     .profile-overlay, .settings-overlay, .birthday-overlay, .idcard-overlay {
       position: fixed;
@@ -3868,6 +3873,7 @@
       birthDate: '',
       position: '',
       gender: '',
+      maritalStatus: '',
       exitDate: ''
     };
 
@@ -4580,6 +4586,7 @@
       filterHeaders.birthDate = findHeaderByAliases(['tanggal lahir', 'tgl lahir', 'tanngal lahir', 'tanggallahir', 'tanggal_lahir', 'date of birth', 'birth date', 'birthdate', 'dob', 'lahir']);
       filterHeaders.position = findHeaderByAliases(['jabatan', 'posisi', 'position', 'job title', 'title']);
       filterHeaders.gender = findHeaderByAliases(['jenis kelamin', 'gender', 'sex', 'jk', 'kelamin']);
+      filterHeaders.maritalStatus = findHeaderByAliases(['status pernikahan', 'status perkawinan', 'status kawin', 'perkawinan', 'pernikahan', 'marital status', 'marital', 'marriage status', 'civil status']);
       filterHeaders.exitDate = findHeaderByAliases(['tanggal keluar', 'tgl keluar', 'resign date', 'date resign', 'tanggal resign', 'keluar']);
     }
 
@@ -4751,11 +4758,38 @@
       container.innerHTML = html;
     }
 
+    function normalizeMaritalStatus(value) {
+      const raw = String(value == null ? '' : value).trim();
+      if (!raw || raw === '-') return '-';
+      const normalized = normalizeText(raw);
+      const firstCode = normalized.split(/\s|[-_/]/)[0];
+      if (['m', 'married', 'kawin', 'menikah', 'nikah'].includes(normalized) || firstCode === 'm') return 'Kawin (Married)';
+      if (['s', 'single', 'tidak kawin', 'belum kawin', 'belum menikah'].includes(normalized) || firstCode === 's') return 'Tidak Kawin (Single)';
+      if (['w', 'widowed', 'widow', 'widower', 'duda', 'janda', 'duda janda'].includes(normalized) || firstCode === 'w') return 'Duda/Janda (Widowed)';
+      if (['d', 'divorced', 'cerai', 'cerai hidup'].includes(normalized) || firstCode === 'd') return 'Cerai (Divorced)';
+      return raw;
+    }
+
+    function renderMaritalStatusBadge(value) {
+      const label = normalizeMaritalStatus(value);
+      const normalized = normalizeText(label);
+      let cls = 'marital-default';
+      if (normalized.includes('kawin') && normalized.includes('married')) cls = 'marital-married';
+      else if (normalized.includes('single') || normalized.includes('tidak kawin')) cls = 'marital-single';
+      else if (normalized.includes('widowed') || normalized.includes('duda') || normalized.includes('janda')) cls = 'marital-widowed';
+      else if (normalized.includes('divorced') || normalized.includes('cerai')) cls = 'marital-divorced';
+      return '<span class=\"status-badge ' + cls + '\">' + escapeHtml(label) + '</span>';
+    }
+
     function renderTableCell(row, header, keyword) {
       const value = row[header] == null ? '' : String(row[header]);
 
       if (filterHeaders.status && header === filterHeaders.status) {
         return renderStatusBadge(value, row);
+      }
+
+      if (filterHeaders.maritalStatus && header === filterHeaders.maritalStatus) {
+        return renderMaritalStatusBadge(value);
       }
 
       return highlightText(value, keyword);
@@ -4979,6 +5013,7 @@
       const tanggalLahir = find(['tanggal lahir', 'tgl lahir', 'dob']);
       const joinDate = find(['join date', 'joindate', 'tanggal masuk', 'tgl masuk']);
       const jenisKelamin = find(['jenis kelamin', 'gender', 'sex', 'jk', 'kelamin']);
+      const statusPernikahan = filterHeaders.maritalStatus ? normalizeMaritalStatus(row[filterHeaders.maritalStatus]) : find(['status pernikahan', 'status perkawinan', 'status kawin', 'perkawinan', 'pernikahan', 'marital status']);
       const noHp = find(['no hp', 'hp', 'handphone', 'phone']);
       const alamat = find(['alamat', 'address']);
       const noKtp = find(['no ktp', 'nik', 'nomor ktp']);
@@ -4998,6 +5033,7 @@
       html += rowLine('Posisi', posisi);
       html += rowLine('Cabang', cabang);
       html += rowLine('Jenis Kelamin', jenisKelamin);
+      html += rowLine('Status Pernikahan', statusPernikahan);
       html += rowLine('Tempat, Tanggal Lahir', `${tempatLahir}, ${tanggalLahir}`);
       html += rowLine('Join Date', joinDate);
       html += rowLine('Usia', profile.age || '-');
@@ -5727,6 +5763,8 @@
       const copyValue = [
         'Nama : ' + nama,
         'No ID : ' + noId,
+        'No Handphone : ' + noHp,
+        'No Rekening : ' + noRekening,
         'No KPJ : ' + noKpj,
         'NIK : ' + nik
       ].join('\n');
