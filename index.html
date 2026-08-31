@@ -1083,6 +1083,16 @@
       font-weight: 700;
     }
 
+    .cv-exit-info {
+      font-weight: 600;
+    }
+
+    .cv-status .status-badge {
+      color: var(--red);
+      background: var(--red-bg);
+      border-color: var(--red-line);
+    }
+
     .profile-card.layout-cv.capture-mode {
       height: auto !important;
       max-height: none !important;
@@ -3488,7 +3498,7 @@
 
         <div class="profile-actions">
           <button type="button" id="copyProfileCardBtn" class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">📋</button>
-          <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data personal: Nama, No.ID, No Handphone, No Rekening, No KPJ, NIK">📝</button>
+          <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data personal: Nama, No ID, No KPJ, NIK">📝</button>
           <button class="icon-btn amber" onclick="cycleProfileLayout()" title="Ganti layout profil">▦</button>
           <button class="icon-btn secondary" onclick="printProfile()" title="Print / Export PDF">🖨</button>
           <button class="icon-btn danger" onclick="closeProfile()" title="Tutup">×</button>
@@ -4991,11 +5001,15 @@
             ${canViewKartu ? `<button type="button" class="cv-view-card-btn" title="Lihat Kartu BPJSTK" onclick="showProfileBpjstkCard(event)">🪪 Lihat Kartu</button>` : ''}
           </span>` : '';
 
+        const renderedValue = extraClass === 'cv-status'
+          ? renderStatusBadge(cleanValue, currentProfileRow || row)
+          : escapeHtml(cleanValue);
+
         return `
           <div class="cv-row">
             <div class="cv-label">${escapeHtml(label)}</div>
             <div class="cv-separator">:</div>
-            <div class="cv-value ${extraClass || ''}"><span class="cv-text">${escapeHtml(cleanValue)}</span>${actionHtml}</div>
+            <div class="cv-value ${extraClass || ''}"><span class="cv-text">${renderedValue}</span>${actionHtml}</div>
           </div>
         `;
       }
@@ -5008,6 +5022,9 @@
       const departemenRaw = find(['departemen', 'department', 'dept', 'bagian', 'divisi', 'division']);
       const departemen = departemenRaw && departemenRaw !== '-' ? departemenRaw : section;
       const status = getDisplayStatus(row);
+      const sudahKeluar = isResigned(row);
+      const tanggalKeluar = find(['tanggal keluar', 'tgl keluar', 'resign date', 'date resign', 'tanggal resign', 'keluar']);
+      const alasanKeluar = find(['alasan keluar', 'reason keluar', 'resign reason', 'alasan resign', 'exit reason', 'reason for leaving']);
 
       const tempatLahir = find(['tempat lahir', 'birth place']);
       const tanggalLahir = find(['tanggal lahir', 'tgl lahir', 'dob']);
@@ -5041,6 +5058,10 @@
       html += rowLine('Gaji Pokok', gajiPokok, '', true);
       html += rowLine('Handphone', noHp, '', true);
       html += rowLine('Status', status, 'cv-status');
+      if (sudahKeluar) {
+        html += rowLine('Tanggal Keluar', tanggalKeluar, 'cv-exit-info');
+        html += rowLine('Alasan Keluar', alasanKeluar, 'cv-exit-info');
+      }
       html += rowLine('Alamat', alamat, '', true);
       html += `</div>`;
 
@@ -5149,15 +5170,11 @@
 
     function isCopyableHeader(header) {
       const h = normalizeText(header);
+      // Copy data personal dibatasi hanya pada 4 field berikut.
       return h === 'nama' || h === 'nama karyawan' || h === 'employee name' ||
         h === 'no id' || h === 'nomor id' || h === 'id karyawan' || h === 'employee id' ||
-        h === 'nik' || h === 'no ktp' || h === 'nomor ktp' || h.includes('ktp') ||
-        h.includes('bpjs kesehatan') || h.includes('no bpjs kesehatan') ||
-        h.includes('bpjamsostek') || h.includes('no kpj') || h.includes('kpj') ||
-        h === 'gaji pokok' || h.includes('basic salary') ||
-        h.includes('handphone') || h.includes('phone') || h === 'hp' || h.includes('no hp') ||
-        h.includes('rekening') || h.includes('nomor rekening') || h.includes('no rekening') ||
-        isAddressHeader(header);
+        h === 'nik' || h === 'no ktp' || h === 'nomor ktp' ||
+        h === 'no kpj' || h === 'nomor kpj' || h === 'kpj' || h.includes('bpjamsostek');
     }
 
     function getProfileDetailIconMeta(header) {
@@ -5211,8 +5228,15 @@
     }
 
     function getDisplayStatus(row) {
-      if (filterHeaders.status) return String(row[filterHeaders.status] || '-').trim() || '-';
+      // Tampilkan status sesuai sumber (WORKER, STAFF, MANAGER, dll).
+      // Jika karyawan sudah keluar, status ditimpa menjadi KELUAR.
       if (isResigned(row)) return 'KELUAR';
+
+      if (filterHeaders.status) {
+        const sourceStatus = String(row[filterHeaders.status] || '').trim();
+        if (sourceStatus) return sourceStatus;
+      }
+
       return 'AKTIF';
     }
 
@@ -5231,14 +5255,9 @@
     }
 
     function getStatusClass(value, row) {
-      if (isResigned(row)) return 'resign';
-
-      const v = normalizeText(value);
-      if (v.includes('aktif') || v.includes('active') || v.includes('staff') || v.includes('worker') || v.includes('manager') || v.includes('expat') || v.includes('tetap') || v.includes('kontrak') || v.includes('probation')) {
-        return 'active';
-      }
-
-      return '';
+      // Hanya karyawan yang benar-benar terindikasi keluar yang merah.
+      // Semua status sumber lainnya (WORKER, STAFF, MANAGER, dll) adalah hijau.
+      return isResigned(row) ? 'resign' : 'active';
     }
 
     function getSectionValue(row) {
@@ -5755,16 +5774,12 @@
       const noId = profile.id && profile.id !== '-'
         ? String(profile.id).trim()
         : getQuickCopyValue(['nomor id', 'no id', 'id karyawan', 'employee id']);
-      const noHp = getQuickCopyValue(['no hp', 'handphone', 'phone', 'mobile', 'no handphone']);
-      const noRekening = getQuickCopyValue(['nomor rekening', 'no rekening', 'rekening', 'bank account']);
       const noKpj = getQuickCopyValue(['no bpjamsostek', 'bpjamsostek', 'no kpj', 'nomor kpj', 'kpj']);
       const nik = getQuickCopyValue(['no ktp', 'nik', 'nomor ktp']);
 
       const copyValue = [
         'Nama : ' + nama,
         'No ID : ' + noId,
-        'No Handphone : ' + noHp,
-        'No Rekening : ' + noRekening,
         'No KPJ : ' + noKpj,
         'NIK : ' + nik
       ].join('\n');
