@@ -3485,7 +3485,7 @@
         </div>
 
         <div class="profile-actions">
-          <button id="copyProfileCardBtn" class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil">📋</button>
+          <button id="copyProfileCardBtn" class="icon-btn purple" onclick="copyProfileCardImage()" title="Copy gambar profil tanpa icon">📋</button>
           <button class="icon-btn cyan" onclick="copyProfileQuickData(event)" title="Copy data personal: Nama, No.ID, No Handphone, No Rekening, No KPJ, NIK">📝</button>
           <button class="icon-btn amber" onclick="cycleProfileLayout()" title="Ganti layout profil">▦</button>
           <button class="icon-btn secondary" onclick="printProfile()" title="Print / Export PDF">🖨</button>
@@ -5380,6 +5380,8 @@
       html += rowLine('Posisi', posisi);
       html += rowLine('Cabang', cabang);
       html += rowLine('Jenis Kelamin', jenisKelamin);
+      // Status Pernikahan ditempatkan tepat di bawah Jenis Kelamin.
+      html += rowLine('Status Pernikahan', statusPerkawinan);
       html += rowLine('Tempat, Tanggal Lahir', [tempatLahir, tanggalLahir !== '-' ? tanggalLahir : ''].filter(Boolean).join(', ') || '-');
       html += rowLine('Join Date', joinDate);
       html += rowLine('Usia', profile.age || '-');
@@ -5387,9 +5389,14 @@
       html += rowLine('Gaji Pokok', gajiPokok, '', true);
       html += rowLine('Handphone', noHp, '', true);
       html += rowLine('Status', status, 'cv-status');
-      html += rowLine('Status Pernikahan', statusPerkawinan);
-      html += rowLine('Tanggal Keluar', tanggalKeluar);
-      html += rowLine('Alasan Keluar', alasanKeluar);
+
+      // Tanggal Keluar dan Alasan Keluar hanya ditampilkan bila Status = KELUAR.
+      const statusIsKeluar = normalizeText(status) === 'keluar';
+      if (statusIsKeluar) {
+        html += rowLine('Tanggal Keluar', tanggalKeluar);
+        html += rowLine('Alasan Keluar', alasanKeluar);
+      }
+
       html += rowLine('Alamat', alamat, '', true);
       html += `</div>`;
 
@@ -5601,7 +5608,7 @@
       if (!card || !currentProfileRow) throw new Error('Profil belum tersedia');
 
       const profile = currentProfileRow._profile || {};
-      const key = String(profile.id || profile.name || '');
+      const key = 'WITH_PHOTO_NO_ICONS|' + String(profile.id || profile.name || '');
       if (preparedProfileCardBlob && preparedProfileCardKey === key) return preparedProfileCardBlob;
       if (preparingProfileCardPromise) return preparingProfileCardPromise;
 
@@ -5667,7 +5674,9 @@
           cloneBody.style.setProperty('max-height', 'none', 'important');
         }
 
-        clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn').forEach(function (el) {
+        // Copy Gambar Profil = salin kartu/profil DENGAN foto karyawan,
+        // tetapi semua tombol/icon interaktif tidak boleh ikut tercopy.
+        clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn, .cv-copy-btn, .profile-bpjstk-action-row, .profile-bpjstk-menu, .bpjstk-view-btn, .cv-view-card-btn, .profile-bpjstk-close').forEach(function (el) {
           el.style.display = 'none';
         });
 
@@ -5731,7 +5740,7 @@
       }
 
       const profile = currentProfileRow._profile || {};
-      const key = String(profile.id || profile.name || '');
+      const key = 'WITH_PHOTO_NO_ICONS|' + String(profile.id || profile.name || '');
 
       try {
         // Jalur utama: PNG kartu sudah dibuat sebelum user menekan tombol.
