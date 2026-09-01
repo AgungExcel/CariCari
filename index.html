@@ -5303,6 +5303,18 @@
       grid.innerHTML = html;
     }
 
+    function normalizeMaritalStatus(value) {
+      const raw = String(value == null ? '' : value).trim();
+      if (!raw || raw === '-') return '-';
+      const normalized = normalizeText(raw);
+      const firstCode = normalized.split(/\s|[-_/]/)[0];
+      if (['m', 'married', 'kawin', 'menikah', 'nikah'].includes(normalized) || firstCode === 'm') return 'Kawin (Married)';
+      if (['s', 'single', 'tidak kawin', 'belum kawin', 'belum menikah'].includes(normalized) || firstCode === 's') return 'Tidak Kawin (Single)';
+      if (['w', 'widowed', 'widow', 'widower', 'duda', 'janda', 'duda janda'].includes(normalized) || firstCode === 'w') return 'Duda/Janda (Widowed)';
+      if (['d', 'divorced', 'cerai', 'cerai hidup'].includes(normalized) || firstCode === 'd') return 'Cerai (Divorced)';
+      return raw;
+    }
+
     function renderCvDetail(row) {
       const grid = document.getElementById('detailGrid');
       const profile = row._profile || {};
@@ -5341,6 +5353,7 @@
       const departemenRaw = find(['departemen', 'department', 'dept', 'bagian', 'divisi', 'division']);
       const departemen = departemenRaw && departemenRaw !== '-' ? departemenRaw : section;
       const status = getDisplayStatus(row);
+      const statusPerkawinan = normalizeMaritalStatus(find(['status perkawinan', 'status pernikahan', 'marital status', 'marital']));
 
       const tempatLahir = find(['tempat lahir', 'birth place']);
       const tanggalLahir = formatClientDateId(find(['tanggal lahir', 'tgl lahir', 'dob']));
@@ -5374,6 +5387,7 @@
       html += rowLine('Gaji Pokok', gajiPokok, '', true);
       html += rowLine('Handphone', noHp, '', true);
       html += rowLine('Status', status, 'cv-status');
+      html += rowLine('Status Pernikahan', statusPerkawinan);
       html += rowLine('Tanggal Keluar', tanggalKeluar);
       html += rowLine('Alasan Keluar', alasanKeluar);
       html += rowLine('Alamat', alamat, '', true);
@@ -6235,7 +6249,7 @@
           noId: profile.id || getRowValueByAliases(row, ['nomor id','no id','id karyawan','employee id']) || '-',
           nama: profile.name || getRowValueByAliases(row, ['nama','nama karyawan','employee name']) || '-',
           section: getSectionValue(row),
-          tglLahir: formatClientDateId(birthDate),
+          tglLahir: formatClientDateId(date),
           usia: profile.age || '-',
           masaKerja: profile.workPeriod || '-',
           status: getDisplayStatus(row),
@@ -6566,7 +6580,7 @@
           section: getSectionValue(row),
           cabang: (profile.branch || (filterHeaders.branch ? row[filterHeaders.branch] : '') || '-'),
           status: getDisplayStatus(row),
-          tglLahir: formatClientDateId(birthDate),
+          tglLahir: formatClientDateId(date),
           age: ageNow,
           usiaSaatIni: ageNow + ' tahun',
           genderKey: genderInfo.key,
@@ -8122,7 +8136,7 @@
           noId: profile.id || getRowValueByAliases(row, ['nomor id','no id','id karyawan','employee id']) || '-',
           nama: profile.name || getRowValueByAliases(row, ['nama','nama karyawan','employee name']) || '-',
           section: getSectionValue(row),
-          tglLahir: formatClientDateId(birthDate),
+          tglLahir: formatClientDateId(date),
           usiaSaatIni: ageNow + ' tahun',
           jenisKelamin: genderInfo.label,
           genderKey: genderInfo.key,
