@@ -731,7 +731,9 @@
     .profile-card.capture-mode .detail-actions,
     .profile-card.capture-mode .bpjstk-view-btn,
     .profile-card.capture-mode .cv-view-card-btn,
-    .profile-card.capture-mode button { display: none !important; }
+    .profile-card.capture-mode button,
+    .profile-card.capture-mode [onclick],
+    .profile-card.capture-mode [data-copy] { display: none !important; }
 
     .profile-header {
       flex: 0 0 auto;
@@ -5180,10 +5182,19 @@
       const initial = getInitials(profile.name || profile.id || 'HL');
       showProfileInitial(initial); selectedPhotoDataUrl=''; selectedPhotoFileId=''; if(copyPhotoBtn) copyPhotoBtn.disabled=true;
       const profileId = String(profile.id || '').trim(); if(!profileId || profileId==='-') return;
-      const cached = getCachedEmployeePhoto(profileId);
-      if(cached) { applyProfilePhotoResult(profileId, cached, initial); return; }
+      // Progress tetap ditampilkan setiap kali profil dibuka.
+      // Jika foto sudah ada di cache, progres langsung berjalan singkat
+      // (bukan menghilang), lalu foto ditampilkan tanpa request ulang.
       const progress = createPhotoProgress(box, 'Mencari foto...');
-      progress.set(8);
+      progress.set(18);
+
+      const cached = getCachedEmployeePhoto(profileId);
+      if (cached) {
+        progress.set(72);
+        applyProfilePhotoResult(profileId, cached, initial, progress);
+        return;
+      }
+
       fetchEmployeePhotoDataCached(profileId).then(function(safeResult){
         progress.set(92);
         applyProfilePhotoResult(profileId, safeResult, initial, progress);
@@ -5208,72 +5219,72 @@
 
       if (activeId !== String(profileId || '').trim()) return;
 
-      if (result && result.found && (result.imageUrl || result.dataUrl)) {
-        selectedPhotoFileId = result.fileId || '';
-        selectedPhotoDataUrl = result.dataUrl || '';
-        copyPhotoBtn.disabled = !selectedPhotoDataUrl;
-
-        // PERBAIKAN FOTO PERSONAL:
-        // Prioritaskan dataUrl dari fileId. URL Google Drive/Googleusercontent
-        // kadang gagal dirender dari halaman GitHub/hosting karena CORS/auth.
-        if (selectedPhotoFileId) {
-          if (progress) progress.set(55);
-
-          fetchPhotoDataUrlByFileId(selectedPhotoFileId).then(function(dataUrl) {
-            const active = currentProfileRow && currentProfileRow._profile ? currentProfileRow._profile : {};
-            const activeIdNow = String(active.id || '').trim();
-            if (activeIdNow !== String(profileId || '').trim()) return;
-
-            if (dataUrl) {
-              selectedPhotoDataUrl = dataUrl;
-              copyPhotoBtn.disabled = false;
-
-              // Tampilkan foto asli langsung dari dataUrl.
-              setProfilePhotoImage(dataUrl, initial, '', progress);
-
-              setTimeout(function () {
-                prepareProfileCardImage().then(function () {
-                  setProfileCardCopyReady(true);
-                }).catch(function (error) {
-                  console.warn('Persiapan copy gambar profil:', error);
-                });
-              }, 80);
-            } else if (result.imageUrl || result.dataUrl) {
-              // Fallback ke URL lama bila dataUrl tidak tersedia.
-              setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, selectedPhotoFileId, progress);
-            } else {
-              if (progress) progress.fail();
-              setTimeout(function(){showProfileInitial(initial);}, progress ? 500 : 0);
-              copyPhotoBtn.disabled = true;
-            }
-          }).catch(function() {
-            if (result.imageUrl || result.dataUrl) {
-              setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, selectedPhotoFileId, progress);
-            } else {
-              if (progress) progress.fail();
-              setTimeout(function(){showProfileInitial(initial);}, progress ? 500 : 0);
-              copyPhotoBtn.disabled = true;
-            }
-          });
-          return;
-        }
-
-        setProfilePhotoImage(result.dataUrl || result.imageUrl, initial, '', progress);
-
-        if (selectedPhotoDataUrl) {
-          setTimeout(function () {
-            prepareProfileCardImage().then(function () {
-              setProfileCardCopyReady(true);
-            }).catch(function (error) {
-              console.warn('Persiapan copy gambar profil:', error);
-            });
-          }, 80);
-        }
-      } else {
-        if(progress) progress.fail();
-        setTimeout(function(){showProfileInitial(initial);}, progress ? 500 : 0);
-        copyPhotoBtn.disabled = true;
+      if (!(result && result.found && (result.imageUrl || result.dataUrl || result.fileId))) {
+        if (progress) progress.fail();
+        setTimeout(function(){showProfileInitial(initial);}, progress ? 350 : 0);
+        if (copyPhotoBtn) copyPhotoBtn.disabled = true;
+        return;
       }
+
+      selectedPhotoFileId = result.fileId || '';
+      selectedPhotoDataUrl = result.dataUrl || '';
+      if (copyPhotoBtn) copyPhotoBtn.disabled = !selectedPhotoDataUrl;
+
+      // CACHE HIT dengan dataUrl: langsung tampilkan.
+      // Tidak perlu memanggil Apps Script lagi.
+      if (selectedPhotoDataUrl) {
+        if (progress) progress.set(92);
+        setProfilePhotoImage(selectedPhotoDataUrl, initial, '', progress);
+        return;
+      }
+
+      // CACHE/RESULT hanya berisi fileId atau imageUrl.
+      // Ambil dataUrl satu kali agar aman untuk html2canvas/copy gambar.
+      if (selectedPhotoFileId) {
+        if (progress) progress.set(72);
+
+        fetchPhotoDataUrlByFileId(selectedPhotoFileId).then(function(dataUrl) {
+          const active = currentProfileRow && currentProfileRow._profile ? currentProfileRow._profile : {};
+          const activeIdNow = String(active.id || '').trim();
+          if (activeIdNow !== String(profileId || '').trim()) return;
+
+          if (dataUrl) {
+            selectedPhotoDataUrl = dataUrl;
+            if (copyPhotoBtn) copyPhotoBtn.disabled = false;
+
+            // Simpan dataUrl ke cache sesi agar profil dibuka lagi
+            // tidak perlu mengambil file foto dari server lagi.
+            const cachedPhoto = Object.assign({}, result || {}, {
+              found: true,
+              fileId: selectedPhotoFileId || (result && result.fileId) || '',
+              dataUrl: dataUrl
+            });
+            setPhotoCache(profileId, cachedPhoto);
+
+            if (progress) progress.set(94);
+            setProfilePhotoImage(dataUrl, initial, '', progress);
+          } else if (result.imageUrl) {
+            if (progress) progress.set(90);
+            setProfilePhotoImage(result.imageUrl, initial, selectedPhotoFileId, progress);
+          } else {
+            if (progress) progress.fail();
+            setTimeout(function(){showProfileInitial(initial);}, progress ? 350 : 0);
+            if (copyPhotoBtn) copyPhotoBtn.disabled = true;
+          }
+        }).catch(function() {
+          if (result.imageUrl) {
+            setProfilePhotoImage(result.imageUrl, initial, selectedPhotoFileId, progress);
+          } else {
+            if (progress) progress.fail();
+            setTimeout(function(){showProfileInitial(initial);}, progress ? 350 : 0);
+            if (copyPhotoBtn) copyPhotoBtn.disabled = true;
+          }
+        });
+        return;
+      }
+
+      // Fallback jika hanya imageUrl yang tersedia.
+      setProfilePhotoImage(result.imageUrl || result.dataUrl, initial, '', progress);
     }
 
     function fetchPhotoDataUrlByFileId(fileId) {
@@ -5299,7 +5310,8 @@
       img.decoding = 'async';
       img.onload = function () {
         if(progress) progress.done();
-        box.innerHTML = ''; box.appendChild(img);
+        box.innerHTML = '';
+        box.appendChild(img);
         if (selectedPhotoDataUrl) {
           setTimeout(function () {
             prepareProfileCardImage().then(function () {
@@ -5746,17 +5758,19 @@
         }
 
         // Copy Profil Karyawan = salin kartu + FOTO karyawan.
-// Semua tombol/icon aksi harus hilang dari hasil gambar.
+// Semua tombol/icon aksi disembunyikan dari hasil copy.
         clone.querySelectorAll(
           '.profile-actions, .photo-action, .copy-mini-btn, .detail-actions, ' +
-          '.bpjstk-view-btn, .cv-view-card-btn, button'
+          '.bpjstk-view-btn, .cv-view-card-btn, button, [onclick], [data-copy]'
         ).forEach(function (el) {
-          el.style.display = 'none';
+          el.style.setProperty('display', 'none', 'important');
+          el.setAttribute('aria-hidden', 'true');
         });
 
-        // Jangan sembunyikan .photo-zone karena foto wajib ikut.
+        // PENTING: jangan sembunyikan photo-zone.
+        // Foto karyawan tetap harus masuk ke hasil Copy Profil.
         const photoZone = clone.querySelector('.photo-zone');
-        if (photoZone) photoZone.style.display = 'flex';
+        if (photoZone) photoZone.style.setProperty('display', 'flex', 'important');
 
         // Pastikan semua gambar pada clone selesai dimuat sebelum capture.
         const images = Array.from(clone.querySelectorAll('img'));
