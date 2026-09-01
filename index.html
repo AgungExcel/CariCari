@@ -727,7 +727,11 @@
     .profile-card.capture-mode { max-height: none !important; overflow: visible !important; }
     .profile-card.capture-mode .profile-actions,
     .profile-card.capture-mode .photo-action,
-    .profile-card.capture-mode .copy-mini-btn { display: none !important; }
+    .profile-card.capture-mode .copy-mini-btn,
+    .profile-card.capture-mode .detail-actions,
+    .profile-card.capture-mode .bpjstk-view-btn,
+    .profile-card.capture-mode .cv-view-card-btn,
+    .profile-card.capture-mode button { display: none !important; }
 
     .profile-header {
       flex: 0 0 auto;
@@ -1102,7 +1106,11 @@
 
     .profile-card.layout-cv.capture-mode .profile-actions,
     .profile-card.layout-cv.capture-mode .photo-action,
-    .profile-card.layout-cv.capture-mode .copy-mini-btn {
+    .profile-card.layout-cv.capture-mode .copy-mini-btn,
+    .profile-card.layout-cv.capture-mode .detail-actions,
+    .profile-card.layout-cv.capture-mode .bpjstk-view-btn,
+    .profile-card.layout-cv.capture-mode .cv-view-card-btn,
+    .profile-card.layout-cv.capture-mode button {
       display: none !important;
     }
 
@@ -4207,7 +4215,14 @@
     const PHOTO_META_STORAGE_PREFIX='CARICARI_PHOTO_META_V2_';
     const PHOTO_META_STORAGE_TTL_MS=1000*60*60*24*7;
     function readPersistentPhotoCache(key){try{const raw=localStorage.getItem(PHOTO_META_STORAGE_PREFIX+key);if(!raw)return null;const item=JSON.parse(raw);if(!item||Date.now()-Number(item.savedAt||0)>PHOTO_META_STORAGE_TTL_MS){localStorage.removeItem(PHOTO_META_STORAGE_PREFIX+key);return null;}return item.result||null;}catch(e){return null;}}
-    function savePersistentPhotoCache(key,result){try{if(key&&result&&result.found&&result.imageUrl)localStorage.setItem(PHOTO_META_STORAGE_PREFIX+key,JSON.stringify({savedAt:Date.now(),result:result}));}catch(e){}}
+    function savePersistentPhotoCache(key,result){
+      try{
+        if(key && result && result.found && (result.imageUrl || result.dataUrl)){
+          localStorage.setItem(PHOTO_META_STORAGE_PREFIX + key,
+            JSON.stringify({savedAt:Date.now(),result:result}));
+        }
+      }catch(e){}
+    }
     function fetchEmployeePhotoDataCached(key){const clean=String(key||'').trim();if(!clean||clean==='-')return Promise.resolve({found:false});if(photoCache[clean])return Promise.resolve(photoCache[clean]);const persisted=readPersistentPhotoCache(clean);if(persisted){setPhotoCache(clean,persisted);return Promise.resolve(persisted);}if(photoPendingRequests[clean])return photoPendingRequests[clean];photoPendingRequests[clean]=new Promise(resolve=>{google.script.run.withSuccessHandler(result=>{const safe=result&&result.found&&result.fileId?{found:true,fileId:result.fileId||'',imageUrl:result.imageUrl||'',dataUrl:result.dataUrl||''}:{found:false};setPhotoCache(clean,safe);savePersistentPhotoCache(clean,safe);resolve(safe);}).withFailureHandler(()=>{const safe={found:false};setPhotoCache(clean,safe);resolve(safe);}).getEmployeePhotoDataById(clean);}).finally(()=>{delete photoPendingRequests[clean]});return photoPendingRequests[clean];}
     function getCachedEmployeePhoto(key){const clean=String(key||'').trim();if(!clean||clean==='-')return null;if(photoCache[clean])return photoCache[clean];const persisted=readPersistentPhotoCache(clean);if(persisted){setPhotoCache(clean,persisted);return persisted;}return null;}
     function clearClientPhotoCache(){try{Object.keys(photoCache||{}).forEach(key=>delete photoCache[key]);Object.keys(photoPendingRequests||{}).forEach(key=>delete photoPendingRequests[key]);Object.keys(localStorage).filter(k=>k.indexOf(PHOTO_META_STORAGE_PREFIX)===0).forEach(k=>localStorage.removeItem(k));}catch(err){}}
@@ -5730,12 +5745,18 @@
           cloneBody.style.setProperty('max-height', 'none', 'important');
         }
 
-        // Tombol Copy Gambar Profil = salin SELURUH kartu/data profil BESERTA foto karyawan.
-        // Hanya tombol-tombol aksi yang disembunyikan agar tidak ikut masuk ke gambar.
-        clone.querySelectorAll('.profile-actions, .photo-action, .copy-mini-btn').forEach(function (el) {
+        // Copy Profil Karyawan = salin kartu + FOTO karyawan.
+// Semua tombol/icon aksi harus hilang dari hasil gambar.
+        clone.querySelectorAll(
+          '.profile-actions, .photo-action, .copy-mini-btn, .detail-actions, ' +
+          '.bpjstk-view-btn, .cv-view-card-btn, button'
+        ).forEach(function (el) {
           el.style.display = 'none';
         });
-        // Jangan sembunyikan .photo-zone: foto karyawan harus ikut tercapture.
+
+        // Jangan sembunyikan .photo-zone karena foto wajib ikut.
+        const photoZone = clone.querySelector('.photo-zone');
+        if (photoZone) photoZone.style.display = 'flex';
 
         // Pastikan semua gambar pada clone selesai dimuat sebelum capture.
         const images = Array.from(clone.querySelectorAll('img'));
