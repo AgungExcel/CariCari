@@ -4582,10 +4582,32 @@
       'STATUS':'status','CABANG':'cabang','TANGGAL KELUAR':'tanggal_keluar',
       'ALASAN KELUAR':'alasan_keluar','FASKES 1':'faskes_1','FASKES GIGI':'faskes_gigi',
       'JENIS KELAMIN':'jenis_kelamin','POSISI':'posisi','DEPARTEMEN':'departemen',
-      'STATUS PERKAWINAN':'status_perkawinan','GAJI POKOK':'gaji_pokok',
-      'BASIC SALARY':'gaji_pokok','SALARY':'gaji_pokok'
+      // Toleransi nama kolom Excel: spasi / underscore / variasi penulisan.
+      'STATUS PERKAWINAN':'status_perkawinan','STATUS PERKAWAINAN':'status_perkawinan',
+      'STATUS PERNIKAHAN':'status_perkawinan','MARITAL STATUS':'status_perkawinan',
+      'GAJI POKOK':'gaji_pokok','GAJI_POKOK':'gaji_pokok',
+      'BASIC SALARY':'gaji_pokok','BASIC_SALARY':'gaji_pokok','SALARY':'gaji_pokok'
     };
-    function normalizeDatabaseUpdateHeader(value) { return String(value == null ? '' : value).replace(/^\uFEFF/,'').replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim().toUpperCase(); }
+    function normalizeDatabaseUpdateHeader(value) { return String(value == null ? '' : value).replace(/^\uFEFF/,'').replace(/\u00A0/g,' ').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim().toUpperCase(); }
+
+    // Hitung Gaji Pokok sesuai ketentuan payroll yang dipakai aplikasi:
+    // STATUS = WORKER -> <= 5 tahun: 2.940.088 + (10.000 x tahun penuh)
+    //                    > 5 tahun: 2.990.088
+    // STATUS selain WORKER -> kosong.
+    function calculateDatabaseUpdateSalary(statusValue, joinDateValue) {
+      if (normalizeText(statusValue) !== 'worker') return null;
+      const join = parseGeneralClientDate(joinDateValue);
+      if (!join || isNaN(join.getTime())) return null;
+
+      const today = getStartOfDay(new Date());
+      let years = today.getFullYear() - join.getFullYear();
+      let months = today.getMonth() - join.getMonth();
+      if (today.getDate() < join.getDate()) months--;
+      if (months < 0) years--;
+      if (years < 0) years = 0;
+
+      return years <= 5 ? (2940088 + (10000 * years)) : 2990088;
+    }
     function databaseUpdateCellValue(value) {
       if (value === undefined || value === null || value === '') return null;
       if (value instanceof Date && !isNaN(value.getTime())) return value.getFullYear()+'-'+String(value.getMonth()+1).padStart(2,'0')+'-'+String(value.getDate()).padStart(2,'0');
@@ -4605,8 +4627,23 @@
       const rows=[];
       for(let r=1;r<sheetRows.length;r++){
         const src=sheetRows[r]||[], obj={};
-        mapped.forEach((col,c)=>{ if(!col)return; let v=databaseUpdateCellValue(src[c]); if(['join_date','tanggal_lahir','tanggal_keluar'].includes(col)&&typeof v==='string'&&/^\d+(\.\d+)?$/.test(v))v=databaseUpdateExcelSerialToDate(v); obj[col]=v; });
+        mapped.forEach((col,c)=>{
+          if(!col)return;
+          let v=databaseUpdateCellValue(src[c]);
+          if(['join_date','tanggal_lahir','tanggal_keluar'].includes(col)&&typeof v==='string'&&/^\d+(\.\d+)?$/.test(v))v=databaseUpdateExcelSerialToDate(v);
+          obj[col]=v;
+        });
         if(!String(obj.nomor_id||'').trim()&&!String(obj.nama||'').trim())continue;
+
+        // Pastikan status perkawinan tetap tersimpan walaupun header Excel memakai
+        // STATUS_PERKAWINAN / STATUS PERKAWAINAN / STATUS PERNIKAHAN.
+        if(obj.status_perkawinan != null) obj.status_perkawinan = String(obj.status_perkawinan).trim() || null;
+
+        // Gaji Pokok JANGAN bergantung pada kolom gaji di Excel.
+        // Selalu hitung ulang berdasarkan STATUS + JOIN DATE agar ketentuan payroll
+        // tetap konsisten setiap kali database di-update.
+        obj.gaji_pokok = calculateDatabaseUpdateSalary(obj.status, obj.join_date);
+
         rows.push(obj);
       }
       if(!rows.length)throw new Error('Tidak ada baris karyawan yang valid.');
@@ -4629,15 +4666,31 @@
         const wb=XLSX.read(await input.files[0].arrayBuffer(),{type:'array',cellDates:true});
         const sheetName=wb.SheetNames[0]; if(!sheetName)throw new Error('Sheet Excel tidak ditemukan.');
         const rows=prepareDatabaseUpdateRows(XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:null,raw:true}));
-        status.textContent='Status: '+rows.length.toLocaleString('id-ID')+' data siap. Mengganti database...';
+        const salaryCount=rows.filter(r=>r.gaji_pokok!=null).length;
+        const maritalCount=rows.filter(r=>r.status_perkawinan!=null&&String(r.status_perkawinan).trim()!=='').length;
+        status.textContent='Status: '+rows.length.toLocaleString('id-ID')+' data siap. Status perkawinan: '+maritalCount.toLocaleString('id-ID')+' | Gaji dihitung: '+salaryCount.toLocaleString('id-ID')+' | Mengganti database...';
+
+        // Gunakan RPC SECURITY DEFINER di Supabase. Jangan fallback ke INSERT langsung
+        // karena INSERT/DELETE langsung dari browser tunduk pada RLS dan menyebabkan
+        // error "permission denied for table employees".
         const batchSize=350; let inserted=0;
         for(let i=0;i<rows.length;i+=batchSize){
           const batch=rows.slice(i,i+batchSize);
           const {data,error}=await caricariSupabase.rpc('replace_employees_batch',{p_rows:batch,p_reset:i===0});
-          if(error)throw new Error('Batch '+(Math.floor(i/batchSize)+1)+' gagal: '+error.message);
+          if(error){
+            const msg=String(error.message||error);
+            if(/permission denied for table employees/i.test(msg)||/row-level security|RLS policy/i.test(msg)){
+              throw new Error('Supabase menolak akses ke tabel employees. Function replace_employees_batch harus SECURITY DEFINER. Jalankan SQL perbaikan yang disediakan untuk aplikasi ini di Supabase SQL Editor, lalu coba Update Database lagi.');
+            }
+            if(/DELETE\s+requires\s+a\s+WHERE\s+clause/i.test(msg)){
+              throw new Error('Function replace_employees_batch masih memakai DELETE tanpa WHERE. Jalankan SQL perbaikan replace_employees_batch di Supabase SQL Editor.');
+            }
+            throw new Error('Batch '+(Math.floor(i/batchSize)+1)+' gagal: '+msg);
+          }
           inserted+=Number(data&&data.inserted||batch.length);
           status.textContent='Status: '+inserted.toLocaleString('id-ID')+' / '+rows.length.toLocaleString('id-ID')+' data masuk...';
         }
+
         try{localStorage.removeItem(SHEET_DATA_CACHE_KEY);}catch(_){ }
         await reloadData({forceFresh:true,silentToast:true});
         status.textContent='Status: selesai. '+inserted.toLocaleString('id-ID')+' data berhasil diperbarui.';
